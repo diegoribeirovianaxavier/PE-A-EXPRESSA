@@ -57,22 +57,22 @@ export const PricingSummaryCard: React.FC<PricingSummaryCardProps> = ({
           </Text>
         </div>
 
-        {/* Card 2: Margem + Frete */}
+        {/* Card 2: Valor do Orçamento Convertido */}
         <div className="p-3.5 bg-orange-50 border border-orange-200 rounded-xl">
           <div className="flex items-center justify-between">
             <Text type="secondary" className="text-xs uppercase font-medium text-orange-800">
-              2. Margem & Frete Fixo
+              2. Orçamento Convertido
             </Text>
             <Tag color="orange" className="text-[11px] font-mono m-0">
-              +{calculation.profit_margin_percent}%
+              +{calculation.original_cost_total > 0 ? (((calculation.final_sale_total - calculation.original_cost_total) / calculation.original_cost_total) * 100).toFixed(1) : 0}%
             </Tag>
           </div>
           <div className="text-xl font-bold text-orange-950 mt-1">
-            {formatCurrency(calculation.subtotal_with_freight)}
+            {formatCurrency(calculation.final_sale_total)}
           </div>
           <div className="text-xs text-orange-700 mt-0.5 flex justify-between">
-            <span>Margem: +{formatCurrency(calculation.margin_amount)}</span>
-            <span>Frete: +R$ 15,00</span>
+            <span>Acréscimo: +{formatCurrency(calculation.final_sale_total - calculation.original_cost_total)}</span>
+            <span>{isPix ? '⚡ No PIX' : `💳 ${calculation.installments_count || 1}x Cartão`}</span>
           </div>
         </div>
 
@@ -80,7 +80,7 @@ export const PricingSummaryCard: React.FC<PricingSummaryCardProps> = ({
         <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl">
           <div className="flex items-center justify-between">
             <Text className="text-xs uppercase font-bold text-emerald-800">
-              Lucro Líquido Real
+              3. Lucro Líquido Real
             </Text>
             <Tag color="success" className="text-[11px] font-bold m-0 flex items-center gap-1">
               <ArrowUpOutlined /> {calculation.net_margin_percent.toFixed(1)}%
@@ -90,7 +90,7 @@ export const PricingSummaryCard: React.FC<PricingSummaryCardProps> = ({
             {formatCurrency(calculation.net_profit)}
           </div>
           <Text className="text-xs text-emerald-600 mt-0.5 block">
-            Líquido já descontado frete e taxas
+            Líquido livre (pós custo, frete e taxa)
           </Text>
         </div>
       </div>
