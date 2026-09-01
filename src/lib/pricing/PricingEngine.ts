@@ -17,18 +17,6 @@ export class PricingEngine {
   }
 
   /**
-   * Etapa C: Retorna a % de taxa de maquininha de cartão baseada no Subtotal com Margem (para precificação teto de tabela)
-   */
-  public static getCardFeePercent(subtotalWithMargin: number): number {
-    if (subtotalWithMargin <= 149.99) return 5.39;
-    if (subtotalWithMargin <= 399.99) return 6.12;
-    if (subtotalWithMargin <= 499.99) return 6.85;
-    if (subtotalWithMargin <= 599.99) return 7.57;
-    if (subtotalWithMargin <= 999.99) return 8.28;
-    return 11.06;
-  }
-
-  /**
    * Retorna a taxa real cobrada pela operadora da maquininha de acordo com o número exato de parcelas
    */
   public static getCardFeePercentByInstallments(installments: number = 1): number {
@@ -64,27 +52,58 @@ export class PricingEngine {
   }
 
   /**
-   * Etapa D: Retorna o número máximo de parcelas sem juros permitidas
+   * Determina a faixa de precificação (Taxa teto de cartão, parcelas máximas e desconto PIX)
+   * Baseado no VALOR FINAL CONVERTIDO com frete e margem
    */
-  public static getMaxInstallments(subtotalWithMargin: number): number {
-    if (subtotalWithMargin <= 149.99) return 2;
-    if (subtotalWithMargin <= 399.99) return 3;
-    if (subtotalWithMargin <= 499.99) return 4;
-    if (subtotalWithMargin <= 599.99) return 5;
-    if (subtotalWithMargin <= 999.99) return 6;
-    return 10;
+  public static getPricingTier(subtotalWithFreight: number): {
+    cardFeePercent: number;
+    maxInstallments: number;
+    pixDiscountPercent: number;
+  } {
+    // Avalia as faixas pelo valor final já convertido:
+    // Faixa 6: A partir de R$ 1.000,00 -> Até 10x | Taxa: 11.06% | PIX: 10.00%
+    if (subtotalWithFreight * 1.1106 >= 1000.00) {
+      return { cardFeePercent: 11.06, maxInstallments: 10, pixDiscountPercent: 10.00 };
+    }
+    // Faixa 5: R$ 600,00 até R$ 999,99 -> Até 6x | Taxa: 8.28% | PIX: 9.67%
+    if (subtotalWithFreight * 1.0828 >= 600.00) {
+      return { cardFeePercent: 8.28, maxInstallments: 6, pixDiscountPercent: 9.67 };
+    }
+    // Faixa 4: R$ 500,00 até R$ 599,99 -> Até 5x | Taxa: 7.57% | PIX: 8.80%
+    if (subtotalWithFreight * 1.0757 >= 500.00) {
+      return { cardFeePercent: 7.57, maxInstallments: 5, pixDiscountPercent: 8.80 };
+    }
+    // Faixa 3: R$ 400,00 até R$ 499,99 -> Até 4x | Taxa: 6.85% | PIX: 7.91%
+    if (subtotalWithFreight * 1.0685 >= 400.00) {
+      return { cardFeePercent: 6.85, maxInstallments: 4, pixDiscountPercent: 7.91 };
+    }
+    // Faixa 2: R$ 150,00 até R$ 399,99 -> Até 3x | Taxa: 6.12% | PIX: 7.01%
+    if (subtotalWithFreight * 1.0612 >= 150.00) {
+      return { cardFeePercent: 6.12, maxInstallments: 3, pixDiscountPercent: 7.01 };
+    }
+    // Faixa 1: Até R$ 149,99 -> Até 2x | Taxa: 5.39% | PIX: 6.09%
+    return { cardFeePercent: 5.39, maxInstallments: 2, pixDiscountPercent: 6.09 };
   }
 
   /**
-   * Etapa E: Retorna a % de desconto do PIX baseada no valor acumulado
+   * Helper para Etapa C
    */
-  public static getPixDiscountPercent(subtotalWithMargin: number): number {
-    if (subtotalWithMargin <= 149.99) return 6.09;
-    if (subtotalWithMargin <= 399.99) return 7.01;
-    if (subtotalWithMargin <= 499.99) return 7.91;
-    if (subtotalWithMargin <= 599.99) return 8.80;
-    if (subtotalWithMargin <= 999.99) return 9.67;
-    return 10.00;
+  public static getCardFeePercent(subtotalWithFreight: number): number {
+    return this.getPricingTier(subtotalWithFreight).cardFeePercent;
+  }
+
+  /**
+   * Helper para Etapa D
+   */
+  public static getMaxInstallments(subtotalWithFreight: number): number {
+    return this.getPricingTier(subtotalWithFreight).maxInstallments;
+  }
+
+  /**
+   * Helper para Etapa E
+   */
+  public static getPixDiscountPercent(subtotalWithFreight: number): number {
+    return this.getPricingTier(subtotalWithFreight).pixDiscountPercent;
   }
 
   /**
@@ -116,12 +135,16 @@ export class PricingEngine {
     const subtotalWithFreight = subtotalWithMargin + freightCost;
     const freightPerUnit = totalQuantity > 0 ? freightCost / totalQuantity : 0;
 
-    // Etapa C: Preço de Tabela no Cartão (precificado com a taxa teto para cobrir até o máximo de parcelas)
-    const cardFeePercent = this.getCardFeePercent(subtotalWithMargin);
+    // Etapas C, D e E: Determinadas sobre o VALOR FINAL CONVERTIDO
+    const tier = this.getPricingTier(subtotalWithFreight);
+    const cardFeePercent = tier.cardFeePercent;
+    const maxInstallments = tier.maxInstallments;
+    const pixDiscountPercent = tier.pixDiscountPercent;
+
+    // Preço Final de Tabela no Cartão
     const cardSaleTotal = subtotalWithFreight * (1 + cardFeePercent / 100);
 
-    // Etapa D: Parcelamento no Cartão
-    const maxInstallments = this.getMaxInstallments(subtotalWithMargin);
+    // Parcelamento no Cartão
     const actualInstallments = Math.max(1, Math.min(maxInstallments, installmentsCount || 1));
     const installmentValue = actualInstallments > 0 ? cardSaleTotal / actualInstallments : cardSaleTotal;
 
@@ -133,8 +156,7 @@ export class PricingEngine {
 
     const appliedCardFeeAmount = cardSaleTotal * (appliedCardFeePercent / 100);
 
-    // Etapa E: Desconto e Valor no PIX (aplicado sobre o Total no Cartão)
-    const pixDiscountPercent = this.getPixDiscountPercent(subtotalWithMargin);
+    // Desconto e Valor no PIX (aplicado sobre o Total no Cartão)
     const pixSaleTotal = cardSaleTotal * (1 - pixDiscountPercent / 100);
     const pixDiscountAmount = cardSaleTotal - pixSaleTotal;
 
