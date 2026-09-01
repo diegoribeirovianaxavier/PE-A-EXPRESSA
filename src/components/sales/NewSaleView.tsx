@@ -45,6 +45,8 @@ import { formatPhone, cleanProductCode, dayjs } from '@/lib/formatters';
 const { Title, Text, Paragraph } = Typography;
 const { Dragger } = Upload;
 
+import { ClientPdfExtractor } from '@/lib/pdf/clientPdfExtractor';
+
 interface NewSaleViewProps {
   onSaleSaved?: () => void;
 }
@@ -82,7 +84,7 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
     return PricingEngine.calculate(items, paymentMethod);
   }, [items, paymentMethod]);
 
-  // Processamento de OCR com a API Gemini Vision
+  // Processamento de Documento / PDF / OCR
   const handleProcessOcr = async () => {
     if (!selectedFile) {
       message.warning('Por favor, selecione ou arraste uma foto ou PDF da nota fiscal primeiro.');
@@ -93,34 +95,61 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
     setOcrSuccess(false);
 
     try {
-      // Converte o arquivo para Base64
-      const reader = new FileReader();
-      const fileDataPromise = new Promise<string>((resolve, reject) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(selectedFile);
-      });
+      const fileName = selectedFile.name || '';
+      const isPdf =
+        fileName.toLowerCase().endsWith('.pdf') ||
+        selectedFile.type === 'application/pdf';
 
-      const base64Data = await fileDataPromise;
-      const mimeType = selectedFile.type || 'image/jpeg';
+      let extracted: any = null;
+      let source = 'gemini';
 
-      const response = await fetch('/api/gemini/ocr', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageBase64: base64Data,
-          mimeType: mimeType,
-          fileName: selectedFile.name,
-        }),
-      });
-
-      const resJson = await response.json();
-
-      if (!response.ok || !resJson.success) {
-        throw new Error(resJson.error || 'Erro ao processar imagem da nota.');
+      // 1. Tenta extração direta do PDF no navegador (Sem IA, sem API key)
+      if (isPdf) {
+        try {
+          const pdfText = await ClientPdfExtractor.extractTextFromPdf(selectedFile);
+          if (pdfText && pdfText.trim().length > 10) {
+            const parsed = ClientPdfExtractor.parsePdfText(pdfText, fileName);
+            if (parsed.items && parsed.items.length > 0) {
+              extracted = parsed;
+              source = 'native_pdf';
+            }
+          }
+        } catch (pdfClientErr) {
+          console.warn('Extração de PDF no navegador falhou, tentando rota de API...', pdfClientErr);
+        }
       }
 
-      const extracted = resJson.data;
+      // 2. Se não for PDF com texto ou se for imagem, chama a rota de API
+      if (!extracted) {
+        const reader = new FileReader();
+        const fileDataPromise = new Promise<string>((resolve, reject) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(selectedFile);
+        });
+
+        const base64Data = await fileDataPromise;
+        const mimeType = selectedFile.type || (isPdf ? 'application/pdf' : 'image/jpeg');
+
+        const response = await fetch('/api/gemini/ocr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageBase64: base64Data,
+            mimeType: mimeType,
+            fileName: selectedFile.name,
+          }),
+        });
+
+        const resJson = await response.json();
+
+        if (!response.ok || !resJson.success) {
+          throw new Error(resJson.error || 'Erro ao processar documento.');
+        }
+
+        extracted = resJson.data;
+        source = resJson.source || 'gemini';
+      }
 
       // Preenche os campos do formulário automaticamente
       form.setFieldsValue({
@@ -152,25 +181,26 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
       }
 
       setOcrSuccess(true);
-      const isNative = resJson.source === 'native_pdf';
+      const isNative = source === 'native_pdf';
       notification.success({
         message: isNative ? 'Documento PDF Lido com Sucesso!' : 'Nota Processada com Sucesso!',
         description: isNative 
           ? `Leitor nativo extraiu ${extracted.items?.length || 0} itens e valores do PDF com precisão.`
-          : `IA do Gemini extraiu ${extracted.items?.length || 0} itens e dados da nota.`,
+          : `IA extraiu ${extracted.items?.length || 0} itens e dados da nota.`,
         placement: 'topRight',
       });
     } catch (err: any) {
       console.error(err);
       notification.error({
-        message: 'Falha no OCR',
-        description: err.message || 'Não foi possível ler o arquivo. Você pode preencher os campos manualmente.',
+        message: 'Falha na Leitura do Documento',
+        description: err.message || 'Não foi possível ler o arquivo automaticamente.',
         placement: 'topRight',
       });
     } finally {
       setIsOcrProcessing(false);
     }
   };
+
 
   // Salvar Venda no Supabase / Local DB
   const handleSaveSale = async () => {
