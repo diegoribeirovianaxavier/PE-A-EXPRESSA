@@ -152,19 +152,14 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
       }
 
       setOcrSuccess(true);
-      if (resJson.isMock) {
-        notification.info({
-          message: 'Extração Concluída (Modo Demonstração)',
-          description: 'A nota foi lida com sucesso! Configure a GEMINI_API_KEY no .env para OCR real em produção.',
-          placement: 'topRight',
-        });
-      } else {
-        notification.success({
-          message: 'Nota Processada com Sucesso!',
-          description: `IA do Gemini extraiu ${extracted.items?.length || 0} itens e dados da nota fiscal.`,
-          placement: 'topRight',
-        });
-      }
+      const isNative = resJson.source === 'native_pdf';
+      notification.success({
+        message: isNative ? 'Documento PDF Lido com Sucesso!' : 'Nota Processada com Sucesso!',
+        description: isNative 
+          ? `Leitor nativo extraiu ${extracted.items?.length || 0} itens e valores do PDF com precisão.`
+          : `IA do Gemini extraiu ${extracted.items?.length || 0} itens e dados da nota.`,
+        placement: 'topRight',
+      });
     } catch (err: any) {
       console.error(err);
       notification.error({

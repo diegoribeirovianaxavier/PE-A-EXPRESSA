@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GeminiOcrService } from '@/lib/gemini/ocrService';
+import { NativePdfParser } from '@/lib/pdf/pdfParser';
 
 export const runtime = 'nodejs';
 
@@ -15,48 +16,83 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Detecta se é arquivo PDF
+    const cleanBase64 = imageBase64.replace(/^data:[^;]+;base64,/, '');
+    const isPdf =
+      mimeType === 'application/pdf' ||
+      (fileName && fileName.toLowerCase().endsWith('.pdf')) ||
+      imageBase64.startsWith('data:application/pdf');
+
+    // =========================================================================
+    // MOTOR 1: LEITURA NATIVA DE PDF (SEM NECESSIDADE DE IA EXTERNA OU API KEY)
+    // Extrai o texto do PDF/DAV diretamente em milissegundos
+    // =========================================================================
+    if (isPdf) {
+      try {
+        const pdfModule: any = await import('pdf-parse');
+        const pdfParse = typeof pdfModule === 'function' ? pdfModule : (pdfModule.default || pdfModule);
+        const buffer = Buffer.from(cleanBase64, 'base64');
+        const pdfData = await pdfParse(buffer);
+
+        if (pdfData && pdfData.text && pdfData.text.trim().length > 10) {
+          const nativeExtracted = NativePdfParser.parseDavText(pdfData.text);
+
+          // Se encontrou itens no PDF ou dados relevantes, retorna com sucesso imediato!
+          if (nativeExtracted.items && nativeExtracted.items.length > 0) {
+            return NextResponse.json({
+              success: true,
+              data: nativeExtracted,
+              source: 'native_pdf',
+              message: `Documento PDF lido nativamente com sucesso (${nativeExtracted.items.length} itens extraídos).`,
+            });
+          }
+        }
+      } catch (pdfErr) {
+        console.warn('Tentativa de leitura nativa de PDF falhou, tentando OCR via IA...', pdfErr);
+      }
+    }
+
+    // =========================================================================
+    // MOTOR 2: OCR COM IA (GOOGLE GEMINI VISION)
+    // Usado para fotos, imagens escaneadas ou quando solicitado
+    // =========================================================================
     const apiKey =
       customApiKey ||
       process.env.GEMINI_API_KEY ||
       process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 
-    if (!apiKey) {
-      return NextResponse.json(
-        {
-          error:
-            'Chave GEMINI_API_KEY não encontrada nas variáveis de ambiente da Vercel. Por favor, adicione GEMINI_API_KEY nas configurações da Vercel e faça um novo deploy.',
-        },
-        { status: 400 }
+    let finalMimeType = mimeType || (isPdf ? 'application/pdf' : 'image/jpeg');
+
+    if (apiKey) {
+      const extractedData = await GeminiOcrService.extractInvoiceData(
+        imageBase64,
+        finalMimeType,
+        apiKey
       );
+
+      return NextResponse.json({
+        success: true,
+        data: extractedData,
+        source: 'gemini_vision',
+        isMock: false,
+      });
     }
 
-    // Detecta mimeType adequado pelo nome do arquivo caso venha vazio
-    let finalMimeType = mimeType || 'image/jpeg';
-    if (fileName) {
-      const lowerName = fileName.toLowerCase();
-      if (lowerName.endsWith('.pdf')) finalMimeType = 'application/pdf';
-      else if (lowerName.endsWith('.png')) finalMimeType = 'image/png';
-      else if (lowerName.endsWith('.webp')) finalMimeType = 'image/webp';
-      else if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) finalMimeType = 'image/jpeg';
-    }
-
-    const extractedData = await GeminiOcrService.extractInvoiceData(
-      imageBase64,
-      finalMimeType,
-      apiKey
-    );
-
-    return NextResponse.json({
-      success: true,
-      data: extractedData,
-      isMock: false,
-    });
-  } catch (error: any) {
-    console.error('Erro no OCR da Nota Fiscal/PDF:', error);
+    // Caso não haja chave da IA e o documento não tenha camada de texto nativa:
     return NextResponse.json(
       {
         success: false,
-        error: error?.message || 'Erro inesperado ao processar documento com a IA do Gemini.',
+        error:
+          'Para fotos e imagens escaneadas, configure a GEMINI_API_KEY na Vercel ou insira a chave nas Configurações. (Para PDFs digitais, a leitura nativa já é automática).',
+      },
+      { status: 400 }
+    );
+  } catch (error: any) {
+    console.error('Erro no processamento do documento:', error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: error?.message || 'Erro inesperado ao processar documento.',
       },
       { status: 500 }
     );
