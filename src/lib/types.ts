@@ -52,6 +52,9 @@ export interface PricingCalculationResult {
   final_sale_total: number;
   net_profit: number;
   net_margin_percent: number;
+  installments_count?: number;
+  applied_card_fee_percent?: number;
+  applied_card_fee_amount?: number;
 
   // Items with calculated unit/total prices
   items: CalculatedSaleItem[];

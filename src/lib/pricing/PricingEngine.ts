@@ -17,7 +17,7 @@ export class PricingEngine {
   }
 
   /**
-   * Etapa C: Retorna a % de taxa de maquininha de cartão baseada no Subtotal com Margem (Etapa A)
+   * Etapa C: Retorna a % de taxa de maquininha de cartão baseada no Subtotal com Margem (para precificação teto de tabela)
    */
   public static getCardFeePercent(subtotalWithMargin: number): number {
     if (subtotalWithMargin <= 149.99) return 5.39;
@@ -26,6 +26,41 @@ export class PricingEngine {
     if (subtotalWithMargin <= 599.99) return 7.57;
     if (subtotalWithMargin <= 999.99) return 8.28;
     return 11.06;
+  }
+
+  /**
+   * Retorna a taxa real cobrada pela operadora da maquininha de acordo com o número exato de parcelas
+   */
+  public static getCardFeePercentByInstallments(installments: number = 1): number {
+    const inst = Math.max(1, Math.min(12, Math.floor(installments)));
+    switch (inst) {
+      case 1:
+        return 4.39; // 1x no crédito / à vista
+      case 2:
+        return 5.39;
+      case 3:
+        return 6.12;
+      case 4:
+        return 6.85;
+      case 5:
+        return 7.57;
+      case 6:
+        return 8.28;
+      case 7:
+        return 8.99;
+      case 8:
+        return 9.68;
+      case 9:
+        return 10.37;
+      case 10:
+        return 11.06;
+      case 11:
+        return 11.75;
+      case 12:
+        return 12.44;
+      default:
+        return 11.06;
+    }
   }
 
   /**
@@ -53,11 +88,12 @@ export class PricingEngine {
   }
 
   /**
-   * Executa o cálculo financeiro completo e rateio por item
+   * Executa o cálculo financeiro completo e rateio por item com desconto de taxa exata por parcela ou PIX
    */
   public static calculate(
     items: SaleItemInput[],
-    paymentMethod: PaymentMethod = 'PIX'
+    paymentMethod: PaymentMethod = 'PIX',
+    installmentsCount: number = 1
   ): PricingCalculationResult {
     // 1. Custo Original Total
     const totalOriginalCost = items.reduce(
@@ -80,32 +116,40 @@ export class PricingEngine {
     const subtotalWithFreight = subtotalWithMargin + freightCost;
     const freightPerUnit = totalQuantity > 0 ? freightCost / totalQuantity : 0;
 
-    // Etapa C: Taxa do Cartão / Maquininha (%)
+    // Etapa C: Preço de Tabela no Cartão (precificado com a taxa teto para cobrir até o máximo de parcelas)
     const cardFeePercent = this.getCardFeePercent(subtotalWithMargin);
     const cardSaleTotal = subtotalWithFreight * (1 + cardFeePercent / 100);
-    const cardFeeAmount = cardSaleTotal * (cardFeePercent / 100);
 
     // Etapa D: Parcelamento no Cartão
     const maxInstallments = this.getMaxInstallments(subtotalWithMargin);
-    const installmentValue = maxInstallments > 0 ? cardSaleTotal / maxInstallments : cardSaleTotal;
+    const actualInstallments = Math.max(1, Math.min(maxInstallments, installmentsCount || 1));
+    const installmentValue = actualInstallments > 0 ? cardSaleTotal / actualInstallments : cardSaleTotal;
+
+    // Taxa REAL cobrada pela maquininha conforme a parcela escolhida
+    const appliedCardFeePercent =
+      paymentMethod === 'CARTAO'
+        ? this.getCardFeePercentByInstallments(actualInstallments)
+        : 0; // No PIX a taxa de maquininha é ZERO
+
+    const appliedCardFeeAmount = cardSaleTotal * (appliedCardFeePercent / 100);
 
     // Etapa E: Desconto e Valor no PIX (aplicado sobre o Total no Cartão)
     const pixDiscountPercent = this.getPixDiscountPercent(subtotalWithMargin);
     const pixSaleTotal = cardSaleTotal * (1 - pixDiscountPercent / 100);
     const pixDiscountAmount = cardSaleTotal - pixSaleTotal;
 
-    // Determina valor final e lucro com base na forma de pagamento
+    // Determina valor final e lucro real com base na forma de pagamento e parcelamento
     let finalSaleTotal = 0;
     let netProfit = 0;
 
     if (paymentMethod === 'CARTAO') {
       finalSaleTotal = cardSaleTotal;
-      // Lucro Líquido = Valor Total no Cartão - Custo Original - R$ 15,00 (frete) - Custo da Taxa
-      netProfit = cardSaleTotal - totalOriginalCost - freightCost - cardFeeAmount;
+      // Lucro Líquido = Total do Cartão - Custo Original - Frete R$ 15,00 - Taxa REAL da Maquininha na Parcela
+      netProfit = cardSaleTotal - totalOriginalCost - freightCost - appliedCardFeeAmount;
     } else {
-      // PIX ou DINHEIRO
+      // PIX ou DINHEIRO (Sem taxa de maquininha)
       finalSaleTotal = pixSaleTotal;
-      // Lucro Líquido = Valor Total no PIX - Custo Original - R$ 15,00 (frete)
+      // Lucro Líquido = Total no PIX - Custo Original - Frete R$ 15,00
       netProfit = pixSaleTotal - totalOriginalCost - freightCost;
     }
 
@@ -118,9 +162,7 @@ export class PricingEngine {
       const unitCost = Number(item.original_unit_cost) || 0;
       const qty = Number(item.quantity) || 1;
       
-      // Preço unitário ajustado proporcionalmente
       let finalUnitPrice = unitCost * multiplier;
-      // Se tiver apenas 1 item total, garante que case exatamente com finalSaleTotal
       if (items.length === 1 && qty === 1) {
         finalUnitPrice = finalSaleTotal;
       }
@@ -145,6 +187,7 @@ export class PricingEngine {
     return {
       original_cost_total: Number(totalOriginalCost.toFixed(2)),
       payment_method: paymentMethod,
+      installments_count: actualInstallments,
       total_items_count: totalQuantity,
 
       profit_margin_percent: profitMarginPercent,
@@ -156,8 +199,11 @@ export class PricingEngine {
       freight_per_item: Number(freightPerUnit.toFixed(2)),
 
       card_fee_percent: cardFeePercent,
-      card_fee_amount: Number(cardFeeAmount.toFixed(2)),
+      card_fee_amount: Number(appliedCardFeeAmount.toFixed(2)),
       card_sale_total: Number(cardSaleTotal.toFixed(2)),
+
+      applied_card_fee_percent: appliedCardFeePercent,
+      applied_card_fee_amount: Number(appliedCardFeeAmount.toFixed(2)),
 
       max_installments: maxInstallments,
       installment_value: Number(installmentValue.toFixed(2)),

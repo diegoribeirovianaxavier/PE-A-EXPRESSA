@@ -105,11 +105,25 @@ export const PricingSummaryCard: React.FC<PricingSummaryCardProps> = ({
         <Descriptions.Item label="Frete Fixo Rateado (Etapa B)">
           <span className="font-semibold text-slate-700">{formatCurrency(calculation.freight_cost)} ({formatCurrency(calculation.freight_per_item)}/peça)</span>
         </Descriptions.Item>
-        <Descriptions.Item label="Total no Cartão (Etapa C)">
+        <Descriptions.Item label="Preço Tabela no Cartão (Etapa C)">
           <Space size={4}>
             <span className="font-semibold text-blue-700">{formatCurrency(calculation.card_sale_total)}</span>
-            <Tag color="blue" className="text-[10px] m-0">+{calculation.card_fee_percent}% Maquininha</Tag>
+            <Tag color="blue" className="text-[10px] m-0">Tabela até {calculation.max_installments}x</Tag>
           </Space>
+        </Descriptions.Item>
+        <Descriptions.Item label={isPix ? "Taxa de Maquininha (PIX)" : `Taxa da Maquininha (${calculation.installments_count || 1}x selecionado)`}>
+          {isPix ? (
+            <Tag color="green" className="text-xs font-semibold m-0">
+              0.00% (Isento de Taxa de Máquina)
+            </Tag>
+          ) : (
+            <Space size={4}>
+              <span className="font-semibold text-red-600">-{formatCurrency(calculation.applied_card_fee_amount || calculation.card_fee_amount)}</span>
+              <Tag color="volcano" className="text-[10px] m-0 font-bold">
+                {calculation.applied_card_fee_percent || calculation.card_fee_percent}%
+              </Tag>
+            </Space>
+          )}
         </Descriptions.Item>
         <Descriptions.Item label="Condição de Parcelamento (Etapa D)">
           <span className="font-semibold text-slate-800">

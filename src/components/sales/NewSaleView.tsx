@@ -88,8 +88,8 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
 
   // Cálculo reativo em tempo real via PricingEngine
   const pricingCalculation = useMemo(() => {
-    return PricingEngine.calculate(items, paymentMethod);
-  }, [items, paymentMethod]);
+    return PricingEngine.calculate(items, paymentMethod, installmentsCount);
+  }, [items, paymentMethod, installmentsCount]);
 
   // Processamento 100% Local de Documentos (PDFs digitais, escaneados e Imagens)
   const handleProcessOcr = async () => {
@@ -251,7 +251,7 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
         original_cost_total: pricingCalculation.original_cost_total,
         profit_margin_percent: pricingCalculation.profit_margin_percent,
         freight_cost: pricingCalculation.freight_cost,
-        card_fee_percent: pricingCalculation.card_fee_percent,
+        card_fee_percent: pricingCalculation.applied_card_fee_percent ?? pricingCalculation.card_fee_percent,
         pix_discount_percent: pricingCalculation.pix_discount_percent,
         final_sale_total: pricingCalculation.final_sale_total,
         net_profit: pricingCalculation.net_profit,
@@ -561,10 +561,15 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
                         value={installmentsCount}
                         onChange={(v) => setInstallmentsCount(v)}
                         className="w-full"
-                        options={Array.from({ length: pricingCalculation.max_installments }, (_, i) => ({
-                          value: i + 1,
-                          label: `${i + 1}x de ${PricingEngine.calculate(items, 'CARTAO').installment_value ? (pricingCalculation.card_sale_total / (i + 1)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ 0,00'}`,
-                        }))}
+                        options={Array.from({ length: pricingCalculation.max_installments }, (_, i) => {
+                          const n = i + 1;
+                          const fee = PricingEngine.getCardFeePercentByInstallments(n);
+                          const partVal = pricingCalculation.card_sale_total / n;
+                          return {
+                            value: n,
+                            label: `${n}x de ${partVal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} (Taxa: ${fee}%)`,
+                          };
+                        })}
                       />
                     </div>
                   </Col>
