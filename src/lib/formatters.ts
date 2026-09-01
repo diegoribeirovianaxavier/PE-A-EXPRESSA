@@ -100,7 +100,7 @@ VENDA ONLINE
 ${sellerContact}
 --------------------------
 NUMERO..: ${invoiceDisplay}
-VENDEDOR: PEÇA EXPRESSA
+VENDEDOR: Pex
 --------------------------
 ${itemsText}
 --------------------------
