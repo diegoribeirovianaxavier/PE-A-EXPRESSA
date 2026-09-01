@@ -3,7 +3,7 @@ import { cleanProductCode, formatPhone } from '../formatters';
 
 /**
  * MOTOR DE OCR 100% LOCAL E OFFLINE (ZERO DEPENDÊNCIA DE API OU IA EXTERNA)
- * Lê PDFs digitais, PDFs escaneados e Fotos/Imagens (JPG, PNG) inteiramente no navegador.
+ * Lê PDFs digitais, PDFs escaneados, Fotos/Imagens e Textos colados inteiramente no navegador.
  */
 export class LocalOcrEngine {
   /**
@@ -57,9 +57,7 @@ export class LocalOcrEngine {
 
     let rawText = '';
 
-    // =========================================================================
-    // ETAPA 1: SE FOR PDF, TENTA EXTRAIR CAMADA DE TEXTO DIGITAL RÁPIDA (0.1s)
-    // =========================================================================
+    // 1. SE FOR PDF, TENTA EXTRAIR CAMADA DE TEXTO DIGITAL RÁPIDA (0.1s)
     if (isPdf) {
       if (onProgress) onProgress('Lendo documento PDF nativamente...', 30);
       rawText = await this.extractTextFromPdfNative(file);
@@ -77,9 +75,7 @@ export class LocalOcrEngine {
       if (onProgress) onProgress('PDF escaneado detectado. Executando OCR local na imagem...', 50);
       rawText = await this.ocrScannedPdfLocally(file, onProgress);
     } else {
-      // =======================================================================
-      // ETAPA 2: SE FOR IMAGEM (JPG, PNG, WEBP), EXECUTA OCR 100% LOCAL (TESSERACT)
-      // =======================================================================
+      // 2. SE FOR IMAGEM (JPG, PNG, WEBP), EXECUTA OCR 100% LOCAL (TESSERACT)
       if (onProgress) onProgress('Processando imagem com motor OCR local...', 40);
       rawText = await this.ocrImageLocally(file, onProgress);
     }
@@ -149,11 +145,10 @@ export class LocalOcrEngine {
 
       let fullOcrText = '';
 
-      // Processa até as 3 primeiras páginas do PDF
       const maxPages = Math.min(pdfDoc.numPages, 3);
       for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
         const page = await pdfDoc.getPage(pageNum);
-        const viewport = page.getViewport({ scale: 2.0 }); // Escala 2x para alta precisão OCR
+        const viewport = page.getViewport({ scale: 2.0 });
 
         const canvas = document.createElement('canvas');
         canvas.width = viewport.width;
@@ -212,7 +207,7 @@ export class LocalOcrEngine {
   }
 
   /**
-   * Parser inteligente que extrai dados comerciais e itens de autopeças de qualquer texto
+   * Parser universal que extrai dados comerciais e itens de qualquer texto colado ou lido
    */
   public static parseDocumentText(rawText: string, fileName?: string): OcrExtractedData {
     if (!rawText) {
@@ -223,12 +218,14 @@ export class LocalOcrEngine {
         car_model: '',
         items: [],
         total_original_cost: 0,
-        notes: 'Documento lido localmente.',
+        notes: 'Documento processado localmente.',
       };
     }
 
+    // 1. Número do Documento / Orçamento
     let docNumber = '';
     const numMatch =
+      rawText.match(/NUMERO[.:\s]+([0-9]+)/i) ||
       rawText.match(/N[ºo°]?\s*(?:do\s*)?(?:Documento|Doc|DAV|Orçamento|Pedido|NF)[\s.:\-#]*([0-9]{3,12})/i) ||
       rawText.match(/(?:DAV|ORÇAMENTO|ORCAMENTO|PEDIDO|NOTA|NF(?:-e)?)[\s.:\-#]*([0-9]{4,12})/i);
     if (numMatch) {
@@ -238,8 +235,10 @@ export class LocalOcrEngine {
       if (fileNumMatch) docNumber = fileNumMatch[1];
     }
 
+    // 2. Cliente
     let clientName = '';
     const clientMatch =
+      rawText.match(/Nome\s*:\s*([^\n\r]+)/i) ||
       rawText.match(/(?:NOME\s*(?:DO\s*CLIENTE)?|CLIENTE|DESTINAT[AÁ]RIO|RAZ[AÃ]O\s*SOCIAL)[\s.:\-]+([A-Za-zÀ-ÖØ-öø-ÿ\s]{3,40})/i);
     if (clientMatch) {
       const candidate = clientMatch[1].trim();
@@ -248,14 +247,26 @@ export class LocalOcrEngine {
       }
     }
 
+    // 3. Veículo / Carro
     let carModel = '';
-    const carMatch = rawText.match(/(?:VE[IÍ]CULO(?:\s*DO\s*CLIENTE)?|CARRO|MODELO|PLACA)[\s.:\-]+([A-Za-z0-9À-ÖØ-öø-ÿ\s\-\.\/]{3,35})/i);
+    const carMatch =
+      rawText.match(/Carro\s*:\s*([^\n\r]+)/i) ||
+      rawText.match(/(?:VE[IÍ]CULO(?:\s*DO\s*CLIENTE)?|CARRO|MODELO|PLACA)[\s.:\-]+([A-Za-z0-9À-ÖØ-öø-ÿ\s\-\.\/]{3,35})/i);
     if (carMatch) {
       carModel = carMatch[1].trim();
     }
 
+    // 4. Endereço / Observações
+    let address = '';
+    const addrMatch = rawText.match(/Endere[çc]o\s*:\s*([^\n\r]+)/i);
+    if (addrMatch) {
+      address = addrMatch[1].trim();
+    }
+
+    // 5. Telefone / WhatsApp
     let clientPhone = '';
     const phoneMatch =
+      rawText.match(/(?:Telefone|Contato|WhatsApp|Tel|Cel)\s*:\s*([^\n\r]+)/i) ||
       rawText.match(/(?:CONTATO(?:\s*DO\s*CLIENTE)?|TEL(?:EFONE)?|WHATSAPP|CEL(?:ULAR)?)[\s.:\-]+([0-9\s\(\)\-+]{8,20})/i) ||
       rawText.match(/(?:(?:\+?55\s*)?(?:\(?\b[1-9]{2}\)?\s*)?(?:9\s*)?[2-9]\d{3}[-\s]?\d{4})/);
     if (phoneMatch) {
@@ -263,8 +274,11 @@ export class LocalOcrEngine {
       clientPhone = formatPhone(rawP);
     }
 
+    // 6. Forma de Pagamento
     let paymentMethod: PaymentMethod = 'CARTAO';
-    const payMatch = rawText.match(/FORMA\s*DE\s*PAGAMENTO[\s.:\-]+([^\n\r]+)/i);
+    const payMatch =
+      rawText.match(/Pagamento\s*:\s*([^\n\r]+)/i) ||
+      rawText.match(/FORMA\s*DE\s*PAGAMENTO[\s.:\-]+([^\n\r]+)/i);
     if (payMatch) {
       const payText = payMatch[1].toUpperCase();
       if (payText.includes('PIX') || payText.includes('DINHEIRO')) {
@@ -274,7 +288,7 @@ export class LocalOcrEngine {
       }
     }
 
-    // Extração de autopeças
+    // 7. Extração de Itens / Autopeças
     const items: Array<{
       item_code?: string;
       item_name: string;
@@ -283,89 +297,132 @@ export class LocalOcrEngine {
       original_unit_cost: number;
     }> = [];
 
-    const brandList = [
-      'COFAP', 'NAKATA', 'FRAS-LE', 'FRASLE', 'BOSCH', 'VALEO', 'SAMPEL',
-      'FREMAX', 'COBREQ', 'TECFIL', 'MANN', 'MAHLE', 'DAYCO', 'GATES',
-      'MONROE', 'TRW', 'MAGNETI MARELLI', 'VICTOR REINZ', 'SABO', 'SKF', 'INA',
-      'AXIOS', 'HIPPER FREIOS', 'HIPPER', 'ORIG VW', 'ORIGINAL'
-    ];
+    // Formato 1: Bloco de Orçamento da NOVA PEÇAS (PRODUTO: ... FABRICA: ... Qtd x Unit = Total)
+    if (rawText.toUpperCase().includes('PRODUTO:') && rawText.includes('x')) {
+      const productBlocks = rawText.split(/(?=PRODUTO:)/i);
+      for (const block of productBlocks) {
+        if (!block.toUpperCase().includes('PRODUTO:')) continue;
 
-    const lines = rawText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-    let currentItem: { pendingDescription?: string } | null = null;
+        const codeMatch = block.match(/PRODUTO\s*:\s*([^\n\r]+)/i);
+        const fabMatch = block.match(/FABRICA\s*:\s*([^\n\r]+)/i);
+        const mathMatch = block.match(/(\d+[.,]\d{2})\s*x\s*(\d+[.,]\d{2})\s*=\s*(\d+[.,]\d{2})/i);
 
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
+        if (codeMatch && mathMatch) {
+          const rawCode = codeMatch[1].trim();
+          const brand = fabMatch ? fabMatch[1].trim() : 'Original';
+          const quantity = parseFloat(mathMatch[1].replace(',', '.')) || 1;
+          const unitCost = parseFloat(mathMatch[2].replace(',', '.')) || 0;
 
-      // Ignora headers
-      if (
-        line.match(/PRODUTO|DESCRIÇÃO|SUB-TOTAL|DESCONTO|VALOR|QTD|EMITENTE|ESTABELECIMENTO|CNPJ|TELEFONE|ENDEREÇO/i) &&
-        line.length < 60
-      ) {
-        continue;
-      }
-
-      // Procura sequências de valores numéricos no fim da linha
-      const numberEndMatch =
-        line.match(/(\d+(?:[.,]\d{1,2})?)\s+(?:R\$\s*)?(\d+[.,]\d{2})\s+(?:R\$\s*)?(\d+[.,]\d{2})(?:\s+(?:R\$\s*)?(\d+[.,]\d{2}))?(?:\s+(?:R\$\s*)?(\d+[.,]\d{2}))?$/) ||
-        line.match(/(?:R\$\s*)?(\d+[.,]\d{2})\s+(?:R\$\s*)?(\d+[.,]\d{2})$/);
-
-      if (numberEndMatch) {
-        const valuesStr = numberEndMatch[0];
-        const textBeforeValues = line.substring(0, line.length - valuesStr.length).trim();
-
-        let fullDescription = textBeforeValues;
-        if (currentItem && currentItem.pendingDescription) {
-          fullDescription = currentItem.pendingDescription + ' ' + textBeforeValues;
-          currentItem = null;
-        }
-
-        let code = '';
-        const codeMatch = fullDescription.match(/^([A-Za-z0-9\-_]{3,20})/);
-        if (codeMatch) {
-          code = cleanProductCode(codeMatch[1]);
-        }
-
-        let cleanDesc = fullDescription
-          .replace(/^([A-Za-z0-9\-_]{3,20})/, '')
-          .replace(/\([A-Za-z0-9\-_]+\)/g, '')
-          .replace(/\(\s*UN\s*/gi, '')
-          .replace(/\s{2,}/g, ' ')
-          .trim();
-
-        let brand = 'Original';
-        const brandHyphenMatch = cleanDesc.match(/-\s*([A-Za-z0-9\s\-]+)$/);
-        if (brandHyphenMatch) {
-          brand = brandHyphenMatch[1].trim();
-          cleanDesc = cleanDesc.replace(/-\s*([A-Za-z0-9\s\-]+)$/, '').trim();
-        } else {
-          for (const b of brandList) {
-            if (new RegExp(`\\b${b}\\b`, 'i').test(fullDescription)) {
-              brand = b;
+          // Descrição entre FABRICA e linha de cálculo
+          let desc = '';
+          const lines = block.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+          let foundFab = false;
+          for (const line of lines) {
+            if (line.toUpperCase().includes('FABRICA:')) {
+              foundFab = true;
+              continue;
+            }
+            if (foundFab && !line.includes('x') && !line.includes('=') && !line.startsWith('-')) {
+              desc = line.trim();
               break;
             }
           }
-        }
 
-        cleanDesc = cleanDesc.replace(/[()]/g, '').trim();
-
-        const qtd = parseFloat(numberEndMatch[1].replace(',', '.')) || 1;
-        const unitCost = parseFloat(numberEndMatch[2].replace(',', '.')) || 0;
-
-        if (unitCost > 0) {
           items.push({
-            item_code: code,
-            item_name: cleanDesc || 'Peça Automotiva',
+            item_code: cleanProductCode(rawCode),
+            item_name: desc || 'Peça Automotiva',
             brand: brand,
-            quantity: qtd,
+            quantity: quantity,
             original_unit_cost: unitCost,
           });
         }
-      } else {
-        if (!line.match(/Identificação|PRODUTO|DESCRIÇÃO|ESTABELECIMENTO|CNPJ|TOTAL/i)) {
-          if (!currentItem) {
-            currentItem = { pendingDescription: line };
+      }
+    }
+
+    // Formato 2: Tabela padrão DAV ou lista genérica de autopeças
+    if (items.length === 0) {
+      const brandList = [
+        'COFAP', 'NAKATA', 'FRAS-LE', 'FRASLE', 'BOSCH', 'VALEO', 'SAMPEL',
+        'FREMAX', 'COBREQ', 'TECFIL', 'MANN', 'MAHLE', 'DAYCO', 'GATES',
+        'MONROE', 'TRW', 'MAGNETI MARELLI', 'VICTOR REINZ', 'SABO', 'SKF', 'INA',
+        'AXIOS', 'HIPPER FREIOS', 'HIPPER', 'ORIG VW', 'HELIAR', 'MOURA', 'ORIGINAL'
+      ];
+
+      const lines = rawText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      let currentItem: { pendingDescription?: string } | null = null;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+
+        if (
+          line.match(/PRODUTO|DESCRIÇÃO|SUB-TOTAL|DESCONTO|VALOR|QTD|EMITENTE|ESTABELECIMENTO|CNPJ|TELEFONE|ENDEREÇO/i) &&
+          line.length < 60
+        ) {
+          continue;
+        }
+
+        const numberEndMatch =
+          line.match(/(\d+(?:[.,]\d{1,2})?)\s+(?:R\$\s*)?(\d+[.,]\d{2})\s+(?:R\$\s*)?(\d+[.,]\d{2})(?:\s+(?:R\$\s*)?(\d+[.,]\d{2}))?(?:\s+(?:R\$\s*)?(\d+[.,]\d{2}))?$/) ||
+          line.match(/(?:R\$\s*)?(\d+[.,]\d{2})\s+(?:R\$\s*)?(\d+[.,]\d{2})$/);
+
+        if (numberEndMatch) {
+          const valuesStr = numberEndMatch[0];
+          const textBeforeValues = line.substring(0, line.length - valuesStr.length).trim();
+
+          let fullDescription = textBeforeValues;
+          if (currentItem && currentItem.pendingDescription) {
+            fullDescription = currentItem.pendingDescription + ' ' + textBeforeValues;
+            currentItem = null;
+          }
+
+          let code = '';
+          const codeMatch = fullDescription.match(/^([A-Za-z0-9\-_]{3,20})/);
+          if (codeMatch) {
+            code = cleanProductCode(codeMatch[1]);
+          }
+
+          let cleanDesc = fullDescription
+            .replace(/^([A-Za-z0-9\-_]{3,20})/, '')
+            .replace(/\([A-Za-z0-9\-_]+\)/g, '')
+            .replace(/\(\s*UN\s*/gi, '')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+
+          let brand = 'Original';
+          const brandHyphenMatch = cleanDesc.match(/-\s*([A-Za-z0-9\s\-]+)$/);
+          if (brandHyphenMatch) {
+            brand = brandHyphenMatch[1].trim();
+            cleanDesc = cleanDesc.replace(/-\s*([A-Za-z0-9\s\-]+)$/, '').trim();
           } else {
-            currentItem.pendingDescription += ' ' + line;
+            for (const b of brandList) {
+              if (new RegExp(`\\b${b}\\b`, 'i').test(fullDescription)) {
+                brand = b;
+                break;
+              }
+            }
+          }
+
+          cleanDesc = cleanDesc.replace(/[()]/g, '').trim();
+
+          const qtd = parseFloat(numberEndMatch[1].replace(',', '.')) || 1;
+          const unitCost = parseFloat(numberEndMatch[2].replace(',', '.')) || 0;
+
+          if (unitCost > 0) {
+            items.push({
+              item_code: code,
+              item_name: cleanDesc || 'Peça Automotiva',
+              brand: brand,
+              quantity: qtd,
+              original_unit_cost: unitCost,
+            });
+          }
+        } else {
+          if (!line.match(/Identificação|PRODUTO|DESCRIÇÃO|ESTABELECIMENTO|CNPJ|TOTAL/i)) {
+            if (!currentItem) {
+              currentItem = { pendingDescription: line };
+            } else {
+              currentItem.pendingDescription += ' ' + line;
+            }
           }
         }
       }
@@ -374,14 +431,14 @@ export class LocalOcrEngine {
     const totalCost = items.reduce((sum, it) => sum + it.original_unit_cost * it.quantity, 0);
 
     return {
-      original_invoice_number: docNumber || `ORC-${Math.floor(10000 + Math.random() * 90000)}`,
+      original_invoice_number: docNumber || '',
       client_name: clientName || '',
       client_phone: clientPhone || '',
       car_model: carModel || '',
       payment_method: paymentMethod,
       items: items,
       total_original_cost: Number(totalCost.toFixed(2)),
-      notes: `Documento processado localmente no navegador (${items.length} itens extraídos).`,
+      notes: address ? `Endereço de Entrega: ${address}` : 'Orçamento processado com sucesso.',
     };
   }
 }

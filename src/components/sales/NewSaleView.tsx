@@ -19,6 +19,7 @@ import {
   Radio,
   Tag,
   Divider,
+  Tabs,
 } from 'antd';
 import {
   InboxOutlined,
@@ -32,6 +33,8 @@ import {
   PhoneOutlined,
   CarOutlined,
   BarcodeOutlined,
+  EditOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons';
 import confetti from 'canvas-confetti';
 import { ItemsEditableTable } from './ItemsEditableTable';
@@ -44,6 +47,7 @@ import { formatPhone, cleanProductCode, dayjs } from '@/lib/formatters';
 
 const { Title, Text, Paragraph } = Typography;
 const { Dragger } = Upload;
+const { TextArea } = Input;
 
 import { LocalOcrEngine } from '@/lib/ocr/localOcrEngine';
 
@@ -61,6 +65,8 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
   const [ocrStatusText, setOcrStatusText] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
   const [ocrSuccess, setOcrSuccess] = useState(false);
+  const [activeInputTab, setActiveInputTab] = useState<string>('upload');
+  const [rawBudgetText, setRawBudgetText] = useState<string>('');
   
   // Itens da venda
   const [items, setItems] = useState<SaleItemInput[]>([
@@ -149,6 +155,63 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
     } finally {
       setIsOcrProcessing(false);
       setOcrStatusText('');
+    }
+  };
+
+  // Processamento de Orçamento Colado em Texto Manual
+  const handleProcessTextBudget = () => {
+    if (!rawBudgetText.trim()) {
+      message.warning('Por favor, cole ou digite o texto do orçamento primeiro.');
+      return;
+    }
+
+    setIsOcrProcessing(true);
+    setOcrSuccess(false);
+
+    try {
+      const extracted = LocalOcrEngine.parseDocumentText(rawBudgetText);
+
+      form.setFieldsValue({
+        original_invoice_number: extracted.original_invoice_number || form.getFieldValue('original_invoice_number') || '',
+        client_name: extracted.client_name || form.getFieldValue('client_name') || '',
+        client_phone: formatPhone(extracted.client_phone || form.getFieldValue('client_phone') || ''),
+        car_model: extracted.car_model || form.getFieldValue('car_model') || '',
+        notes: extracted.notes || form.getFieldValue('notes') || '',
+      });
+
+      if (extracted.original_invoice_number) {
+        setInvoiceNumber(extracted.original_invoice_number);
+      }
+      if (extracted.client_phone) {
+        setClientPhone(extracted.client_phone);
+      }
+      if (extracted.payment_method) {
+        setPaymentMethod(extracted.payment_method);
+      }
+
+      if (extracted.items && extracted.items.length > 0) {
+        const mappedItems: SaleItemInput[] = extracted.items.map((it: any, idx: number) => ({
+          id: `item-${Date.now()}-${idx}`,
+          item_code: cleanProductCode(it.item_code),
+          item_name: it.item_name || 'Peça Automotiva',
+          brand: it.brand || 'Original',
+          quantity: Number(it.quantity) || 1,
+          original_unit_cost: Number(it.original_unit_cost) || 0,
+        }));
+        setItems(mappedItems);
+      }
+
+      setOcrSuccess(true);
+      notification.success({
+        message: 'Orçamento Convertido com Sucesso!',
+        description: `${extracted.items?.length || 0} peças, dados do cliente e cálculo da PEÇA EXPRESSA atualizados!`,
+        placement: 'topRight',
+      });
+    } catch (err: any) {
+      console.error(err);
+      message.error('Erro ao interpretar o texto do orçamento.');
+    } finally {
+      setIsOcrProcessing(false);
     }
   };
 
@@ -279,63 +342,121 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
       <Row gutter={[20, 20]}>
         {/* Coluna Esquerda: Upload, OCR e Dados */}
         <Col xs={24} lg={15} className="space-y-6">
-          {/* Módulo de Upload e Leitura Automática */}
+          {/* Módulo de Entrada do Orçamento (Upload ou Texto Manual) */}
           <Card
             title={
               <Space>
                 <ThunderboltOutlined className="text-orange-500 text-lg" />
-                <span className="font-bold text-slate-800">1. Upload & Leitura Automática (PDF ou Imagem)</span>
+                <span className="font-bold text-slate-800">1. Entrada do Orçamento (Arquivo ou Texto)</span>
               </Space>
             }
             className="border-slate-200 shadow-sm"
           >
-            <Dragger
-              name="file"
-              multiple={false}
-              fileList={fileList}
-              accept=".jpg,.jpeg,.png,.webp,.pdf"
-              beforeUpload={(file) => {
-                setSelectedFile(file);
-                setFileList([file]);
-                return false;
-              }}
-              onRemove={() => {
-                setSelectedFile(null);
-                setFileList([]);
-                setOcrSuccess(false);
-              }}
-              className="bg-slate-50 hover:border-orange-400 p-4 rounded-xl"
-            >
-              <p className="ant-upload-drag-icon text-orange-500 mb-2">
-                <InboxOutlined style={{ fontSize: '36px' }} />
-              </p>
-              <p className="ant-upload-text text-sm font-semibold text-slate-700">
-                Clique ou arraste o PDF ou Foto do Orçamento / Nota Fiscal aqui
-              </p>
-              <p className="ant-upload-hint text-xs text-slate-400">
-                Suporta PDFs de DAVs, orçamentos da NOVA PEÇAS e fotos de cupom (JPG/PNG)
-              </p>
-            </Dragger>
+            <Tabs
+              activeKey={activeInputTab}
+              onChange={setActiveInputTab}
+              items={[
+                {
+                  key: 'upload',
+                  label: (
+                    <Space>
+                      <FileImageOutlined />
+                      <span>Upload de Arquivo (PDF / Foto)</span>
+                    </Space>
+                  ),
+                  children: (
+                    <div>
+                      <Dragger
+                        name="file"
+                        multiple={false}
+                        fileList={fileList}
+                        accept=".jpg,.jpeg,.png,.webp,.pdf"
+                        beforeUpload={(file) => {
+                          setSelectedFile(file);
+                          setFileList([file]);
+                          return false;
+                        }}
+                        onRemove={() => {
+                          setSelectedFile(null);
+                          setFileList([]);
+                          setOcrSuccess(false);
+                        }}
+                        className="bg-slate-50 hover:border-orange-400 p-4 rounded-xl"
+                      >
+                        <p className="ant-upload-drag-icon text-orange-500 mb-2">
+                          <InboxOutlined style={{ fontSize: '36px' }} />
+                        </p>
+                        <p className="ant-upload-text text-sm font-semibold text-slate-700">
+                          Clique ou arraste o PDF ou Foto do Orçamento / Nota Fiscal aqui
+                        </p>
+                        <p className="ant-upload-hint text-xs text-slate-400">
+                          Suporta PDFs de DAVs, orçamentos da NOVA PEÇAS e fotos de cupom (JPG/PNG)
+                        </p>
+                      </Dragger>
 
-            <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-              <Button
-                type="primary"
-                icon={<ThunderboltOutlined />}
-                size="middle"
-                loading={isOcrProcessing}
-                disabled={!selectedFile}
-                onClick={handleProcessOcr}
-                className="!bg-slate-900 hover:!bg-slate-800 font-semibold w-full sm:w-auto"
-              >
-                {isOcrProcessing ? (ocrStatusText || 'Processando Documento...') : 'Processar Orçamento / Nota'}
-              </Button>
+                      <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <Button
+                          type="primary"
+                          icon={<ThunderboltOutlined />}
+                          size="middle"
+                          loading={isOcrProcessing}
+                          disabled={!selectedFile}
+                          onClick={handleProcessOcr}
+                          className="!bg-slate-900 hover:!bg-slate-800 font-semibold w-full sm:w-auto"
+                        >
+                          {isOcrProcessing ? (ocrStatusText || 'Processando Documento...') : 'Processar Orçamento / Nota'}
+                        </Button>
 
-              {ocrSuccess && (
-                <Tag color="success" icon={<CheckCircleOutlined />} className="py-1 px-3 text-xs">
-                  Dados e peças extraídos com sucesso!
-                </Tag>
-              )}
-            </div>
+                        {ocrSuccess && activeInputTab === 'upload' && (
+                          <Tag color="success" icon={<CheckCircleOutlined />} className="py-1 px-3 text-xs">
+                            Dados e peças extraídos com sucesso!
+                          </Tag>
+                        )}
+                      </div>
+                    </div>
+                  ),
+                },
+                {
+                  key: 'text',
+                  label: (
+                    <Space>
+                      <EditOutlined />
+                      <span>Colar Texto do Orçamento (Manual)</span>
+                    </Space>
+                  ),
+                  children: (
+                    <div className="space-y-3">
+                      <TextArea
+                        rows={9}
+                        value={rawBudgetText}
+                        onChange={(e) => setRawBudgetText(e.target.value)}
+                        placeholder={`Cole aqui o texto do orçamento da NOVA PEÇAS com os dados do cliente...\n\nExemplo:\n-----ORÇAMENTO VENDA------\nNUMERO..: 3575357\nPRODUTO: NP006710 / H70ND\nFABRICA: HELIAR\nBATERIA\n  1,00 x   829,90 =   829,90\n--------------------------\nTOTAL: 829,90\nNome : Diego Xavier\nCarro: Ford Ka 1.0 12v\nEndereço: Rua Santa Musa, 5\nPagamento: Cartão`}
+                        className="font-mono text-xs bg-slate-50 border-slate-300 rounded-xl"
+                      />
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <Button
+                          type="primary"
+                          icon={<ThunderboltOutlined />}
+                          size="middle"
+                          loading={isOcrProcessing}
+                          disabled={!rawBudgetText.trim()}
+                          onClick={handleProcessTextBudget}
+                          className="!bg-orange-500 hover:!bg-orange-600 font-semibold w-full sm:w-auto shadow-sm"
+                        >
+                          Converter Orçamento para PEÇA EXPRESSA
+                        </Button>
+
+                        {ocrSuccess && activeInputTab === 'text' && (
+                          <Tag color="success" icon={<CheckCircleOutlined />} className="py-1 px-3 text-xs">
+                            Orçamento convertido com sucesso!
+                          </Tag>
+                        )}
+                      </div>
+                    </div>
+                  ),
+                },
+              ]}
+            />
           </Card>
 
           {/* Formulário de Dados do Cliente e Nota */}
