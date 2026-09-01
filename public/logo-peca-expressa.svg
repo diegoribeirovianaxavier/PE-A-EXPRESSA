@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 100" fill="none">
+  <!-- Ícone de Raio / Engrenagem Veloz -->
+  <rect x="10" y="15" width="70" height="70" rx="16" fill="url(#brandGrad)" />
+  <path d="M50 25L32 52H48L42 75L62 46H46L50 25Z" fill="#FFFFFF" />
+  
+  <!-- Tipografia Peça Expressa -->
+  <text x="95" y="48" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="900" font-size="28" fill="#FFFFFF" letter-spacing="0.5">PEÇA <tspan fill="#f97316">EXPRESSA</tspan></text>
+  <text x="95" y="70" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="600" font-size="12" fill="#94a3b8" letter-spacing="3">VENDA ONLINE DE AUTOPEÇAS</text>
+
+  <defs>
+    <linearGradient id="brandGrad" x1="10" y1="15" x2="80" y2="85" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ea580c" />
+      <stop offset="1" stop-color="#f97316" />
+    </linearGradient>
+  </defs>
+</svg>
