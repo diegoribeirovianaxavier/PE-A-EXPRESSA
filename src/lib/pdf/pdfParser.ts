@@ -58,7 +58,9 @@ export class NativePdfParser {
         continue;
       }
 
-      const numberEndMatch = line.match(/(\d+[.,]\d{2})\s+(\d+[.,]\d{2})\s+(\d+[.,]\d{2})(?:\s+(\d+[.,]\d{2}))?(?:\s+(\d+[.,]\d{2}))?$/);
+      const numberEndMatch =
+        line.match(/(\d+(?:[.,]\d{1,2})?)\s+(?:R\$\s*)?(\d+[.,]\d{2})\s+(?:R\$\s*)?(\d+[.,]\d{2})(?:\s+(?:R\$\s*)?(\d+[.,]\d{2}))?(?:\s+(?:R\$\s*)?(\d+[.,]\d{2}))?$/) ||
+        line.match(/(?:R\$\s*)?(\d+[.,]\d{2})\s+(?:R\$\s*)?(\d+[.,]\d{2})$/);
 
       if (numberEndMatch) {
         const valuesStr = numberEndMatch[0];
