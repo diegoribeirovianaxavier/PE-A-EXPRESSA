@@ -104,6 +104,7 @@ export interface OcrExtractedData {
   client_name?: string;
   client_phone?: string;
   car_model?: string;
+  payment_method?: PaymentMethod;
   items: Array<{
     item_code?: string;
     item_name: string;

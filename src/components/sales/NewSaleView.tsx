@@ -45,7 +45,7 @@ import { formatPhone, cleanProductCode, dayjs } from '@/lib/formatters';
 const { Title, Text, Paragraph } = Typography;
 const { Dragger } = Upload;
 
-import { ClientPdfExtractor } from '@/lib/pdf/clientPdfExtractor';
+import { LocalOcrEngine } from '@/lib/ocr/localOcrEngine';
 
 interface NewSaleViewProps {
   onSaleSaved?: () => void;
@@ -58,6 +58,7 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
   const [fileList, setFileList] = useState<any[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isOcrProcessing, setIsOcrProcessing] = useState(false);
+  const [ocrStatusText, setOcrStatusText] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
   const [ocrSuccess, setOcrSuccess] = useState(false);
   
@@ -84,10 +85,10 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
     return PricingEngine.calculate(items, paymentMethod);
   }, [items, paymentMethod]);
 
-  // Processamento de Documento / PDF / OCR
+  // Processamento 100% Local de Documentos (PDFs digitais, escaneados e Imagens)
   const handleProcessOcr = async () => {
     if (!selectedFile) {
-      message.warning('Por favor, selecione ou arraste uma foto ou PDF da nota fiscal primeiro.');
+      message.warning('Por favor, selecione ou arraste uma foto ou PDF do orçamento primeiro.');
       return;
     }
 
@@ -95,61 +96,10 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
     setOcrSuccess(false);
 
     try {
-      const fileName = selectedFile.name || '';
-      const isPdf =
-        fileName.toLowerCase().endsWith('.pdf') ||
-        selectedFile.type === 'application/pdf';
-
-      let extracted: any = null;
-      let source = 'gemini';
-
-      // 1. Tenta extração direta do PDF no navegador (Sem IA, sem API key)
-      if (isPdf) {
-        try {
-          const pdfText = await ClientPdfExtractor.extractTextFromPdf(selectedFile);
-          if (pdfText && pdfText.trim().length > 10) {
-            const parsed = ClientPdfExtractor.parsePdfText(pdfText, fileName);
-            if (parsed.items && parsed.items.length > 0) {
-              extracted = parsed;
-              source = 'native_pdf';
-            }
-          }
-        } catch (pdfClientErr) {
-          console.warn('Extração de PDF no navegador falhou, tentando rota de API...', pdfClientErr);
-        }
-      }
-
-      // 2. Se não for PDF com texto ou se for imagem, chama a rota de API
-      if (!extracted) {
-        const reader = new FileReader();
-        const fileDataPromise = new Promise<string>((resolve, reject) => {
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(selectedFile);
-        });
-
-        const base64Data = await fileDataPromise;
-        const mimeType = selectedFile.type || (isPdf ? 'application/pdf' : 'image/jpeg');
-
-        const response = await fetch('/api/gemini/ocr', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            imageBase64: base64Data,
-            mimeType: mimeType,
-            fileName: selectedFile.name,
-          }),
-        });
-
-        const resJson = await response.json();
-
-        if (!response.ok || !resJson.success) {
-          throw new Error(resJson.error || 'Erro ao processar documento.');
-        }
-
-        extracted = resJson.data;
-        source = resJson.source || 'gemini';
-      }
+      const extracted = await LocalOcrEngine.processDocument(
+        selectedFile,
+        (status) => setOcrStatusText(status)
+      );
 
       // Preenche os campos do formulário automaticamente
       form.setFieldsValue({
@@ -184,12 +134,9 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
       }
 
       setOcrSuccess(true);
-      const isNative = source === 'native_pdf';
       notification.success({
-        message: isNative ? 'Documento PDF Lido com Sucesso!' : 'Nota Processada com Sucesso!',
-        description: isNative 
-          ? `Leitor nativo extraiu ${extracted.items?.length || 0} itens e valores do PDF com precisão.`
-          : `IA extraiu ${extracted.items?.length || 0} itens e dados da nota.`,
+        message: 'Documento Processado com Sucesso!',
+        description: `${extracted.items?.length || 0} autopeças e dados extraídos diretamente no aplicativo.`,
         placement: 'topRight',
       });
     } catch (err: any) {
@@ -201,6 +148,7 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
       });
     } finally {
       setIsOcrProcessing(false);
+      setOcrStatusText('');
     }
   };
 
@@ -331,12 +279,12 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
       <Row gutter={[20, 20]}>
         {/* Coluna Esquerda: Upload, OCR e Dados */}
         <Col xs={24} lg={15} className="space-y-6">
-          {/* Módulo de Upload e OCR com Gemini */}
+          {/* Módulo de Upload e Leitura Automática */}
           <Card
             title={
               <Space>
-                <RobotOutlined className="text-orange-500 text-lg" />
-                <span className="font-bold text-slate-800">1. Upload & Leitura com IA (Gemini Vision)</span>
+                <ThunderboltOutlined className="text-orange-500 text-lg" />
+                <span className="font-bold text-slate-800">1. Upload & Leitura Automática (PDF ou Imagem)</span>
               </Space>
             }
             className="border-slate-200 shadow-sm"
@@ -349,7 +297,7 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
               beforeUpload={(file) => {
                 setSelectedFile(file);
                 setFileList([file]);
-                return false; // Impede upload automático do AntD
+                return false;
               }}
               onRemove={() => {
                 setSelectedFile(null);
@@ -362,10 +310,10 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
                 <InboxOutlined style={{ fontSize: '36px' }} />
               </p>
               <p className="ant-upload-text text-sm font-semibold text-slate-700">
-                Clique ou arraste a Foto ou PDF da Nota Fiscal aqui
+                Clique ou arraste o PDF ou Foto do Orçamento / Nota Fiscal aqui
               </p>
               <p className="ant-upload-hint text-xs text-slate-400">
-                Suporta JPG, PNG, WebP e PDF de cupons ou notas da loja física (&ldquo;NOVA PEÇAS&rdquo;)
+                Suporta PDFs de DAVs, orçamentos da NOVA PEÇAS e fotos de cupom (JPG/PNG)
               </p>
             </Dragger>
 
@@ -379,12 +327,12 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
                 onClick={handleProcessOcr}
                 className="!bg-slate-900 hover:!bg-slate-800 font-semibold w-full sm:w-auto"
               >
-                {isOcrProcessing ? 'Lendo Nota com IA...' : 'Processar Nota com IA'}
+                {isOcrProcessing ? (ocrStatusText || 'Processando Documento...') : 'Processar Orçamento / Nota'}
               </Button>
 
               {ocrSuccess && (
                 <Tag color="success" icon={<CheckCircleOutlined />} className="py-1 px-3 text-xs">
-                  Dados extraídos com sucesso!
+                  Dados e peças extraídos com sucesso!
                 </Tag>
               )}
             </div>
