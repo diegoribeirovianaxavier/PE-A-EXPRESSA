@@ -10,27 +10,39 @@ export async function POST(req: NextRequest) {
 
     if (!imageBase64) {
       return NextResponse.json(
-        { error: 'Nenhuma imagem fornecida para processamento.' },
+        { error: 'Nenhum documento ou imagem fornecido para processamento.' },
         { status: 400 }
       );
     }
 
-    const apiKey = customApiKey || process.env.GEMINI_API_KEY;
+    const apiKey =
+      customApiKey ||
+      process.env.GEMINI_API_KEY ||
+      process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 
-    // Se não tiver chave da API Gemini configurada, oferece fallback de demonstração inteligente
-    if (!apiKey || apiKey === 'your-gemini-api-key-here') {
-      const mockData = GeminiOcrService.getMockOcrData(fileName || 'nota_fiscal.jpg');
-      return NextResponse.json({
-        success: true,
-        data: mockData,
-        isMock: true,
-        message: 'Modo Demonstração: GEMINI_API_KEY não configurada no .env. Dados de exemplo extraídos com sucesso.',
-      });
+    if (!apiKey) {
+      return NextResponse.json(
+        {
+          error:
+            'Chave GEMINI_API_KEY não encontrada nas variáveis de ambiente da Vercel. Por favor, adicione GEMINI_API_KEY nas configurações da Vercel e faça um novo deploy.',
+        },
+        { status: 400 }
+      );
+    }
+
+    // Detecta mimeType adequado pelo nome do arquivo caso venha vazio
+    let finalMimeType = mimeType || 'image/jpeg';
+    if (fileName) {
+      const lowerName = fileName.toLowerCase();
+      if (lowerName.endsWith('.pdf')) finalMimeType = 'application/pdf';
+      else if (lowerName.endsWith('.png')) finalMimeType = 'image/png';
+      else if (lowerName.endsWith('.webp')) finalMimeType = 'image/webp';
+      else if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) finalMimeType = 'image/jpeg';
     }
 
     const extractedData = await GeminiOcrService.extractInvoiceData(
       imageBase64,
-      mimeType || 'image/jpeg',
+      finalMimeType,
       apiKey
     );
 
@@ -40,11 +52,11 @@ export async function POST(req: NextRequest) {
       isMock: false,
     });
   } catch (error: any) {
-    console.error('Erro no OCR da Nota Fiscal:', error);
+    console.error('Erro no OCR da Nota Fiscal/PDF:', error);
     return NextResponse.json(
       {
         success: false,
-        error: error?.message || 'Erro inesperado ao processar nota fiscal.',
+        error: error?.message || 'Erro inesperado ao processar documento com a IA do Gemini.',
       },
       { status: 500 }
     );

@@ -63,19 +63,19 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
   const [items, setItems] = useState<SaleItemInput[]>([
     {
       id: 'item-1',
-      item_code: 'BD4120',
-      item_name: 'Jogo de Pastilhas de Freio Dianteiras',
-      brand: 'Fras-le',
+      item_code: '',
+      item_name: '',
+      brand: '',
       quantity: 1,
-      original_unit_cost: 180.00,
+      original_unit_cost: 0,
     },
   ]);
 
   // Forma de pagamento
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('PIX');
   const [installmentsCount, setInstallmentsCount] = useState<number>(1);
-  const [invoiceNumber, setInvoiceNumber] = useState<string>('NF-89421');
-  const [clientPhone, setClientPhone] = useState<string>('(21) 98765-4321');
+  const [invoiceNumber, setInvoiceNumber] = useState<string>('');
+  const [clientPhone, setClientPhone] = useState<string>('');
 
   // Cálculo reativo em tempo real via PricingEngine
   const pricingCalculation = useMemo(() => {
@@ -376,10 +376,10 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
               form={form}
               layout="vertical"
               initialValues={{
-                original_invoice_number: 'NF-89421',
-                client_name: 'Carlos Eduardo Silva',
-                client_phone: '(21) 98765-4321',
-                car_model: 'Civic 2.0 2018',
+                original_invoice_number: '',
+                client_name: '',
+                client_phone: '',
+                car_model: '',
               }}
             >
               <Row gutter={16}>
