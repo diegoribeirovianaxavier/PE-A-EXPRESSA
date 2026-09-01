@@ -1,51 +1,41 @@
 import { OcrExtractedData } from '../types';
-import { cleanProductCode } from '../formatters';
+import { cleanProductCode, formatPhone } from '../formatters';
 
-/**
- * Utilitário de parsing nativo para extração de texto de PDFs (DAVs, Orçamentos, DANFEs)
- * Funciona 100% de forma local e offline sem depender de IA externa.
- */
 export class NativePdfParser {
-  /**
-   * Extrai dados comerciais e fiscais do texto bruto do PDF/DAV
-   */
-  public static parseDavText(rawText: string): OcrExtractedData {
-    const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    
-    let originalInvoiceNumber = '';
+  public static parseDavText(rawText: string, fileName?: string): OcrExtractedData {
+    let docNumber = '';
+    const numMatch =
+      rawText.match(/N[ºo°]\s*do\s*Documento:\s*([0-9]+)/i) ||
+      rawText.match(/(?:DAV|D\.A\.V|Documento|Pedido|Orçamento)[\s.:\-#]*([0-9]{4,10})/i);
+    if (numMatch) {
+      docNumber = numMatch[1];
+    } else if (fileName) {
+      const fileNumMatch = fileName.match(/(\d{4,10})/);
+      if (fileNumMatch) docNumber = fileNumMatch[1];
+    }
+
     let clientName = '';
-    let clientPhone = '';
-    let carModel = '';
-    let notes = '';
-
-    // 1. Extração do Número do DAV / Pedido / Orçamento / NF
-    const davMatch = rawText.match(/(?:DAV|D\.A\.V|ORÇAMENTO|ORCAMENTO|PEDIDO|NOTA|NF(?:-e)?|DOCUMENTO AUXILIAR)[^\d\n]*([0-9]{3,10})/i);
-    if (davMatch) {
-      originalInvoiceNumber = `DAV-${davMatch[1]}`;
-    }
-
-    // 2. Extração do Cliente / Destinatário
-    const clientMatch = rawText.match(/(?:CLIENTE|NOME|DESTINAT[AÁ]RIO|RAZ[AÃ]O SOCIAL)[\s.:\-]+([^\n\r,;]{3,50})/i);
+    const clientMatch = rawText.match(/NOME\s*DO\s*CLIENTE:\s*([^\n\r]+)/i);
     if (clientMatch) {
-      const candidate = clientMatch[1].trim();
-      if (!candidate.match(/PEÇA EXPRESSA|NOVA PEÇAS|CNPJ|CPF|ENDEREÇO/i)) {
-        clientName = candidate;
-      }
+      clientName = clientMatch[1].trim();
     }
 
-    // 3. Extração de Telefone / WhatsApp
-    const phoneMatch = rawText.match(/(?:\(?\b[1-9]{2}\)?\s*(?:9\s*)?[2-9]\d{3}[-\s]?\d{4}\b)/);
-    if (phoneMatch) {
-      clientPhone = phoneMatch[0].trim();
-    }
-
-    // 4. Extração de Veículo / Carro / Placa
-    const carMatch = rawText.match(/(?:VE[IÍ]CULO|CARRO|MODELO|PLACA)[\s.:\-]+([^\n\r,;]{3,50})/i);
+    let carModel = '';
+    const carMatch = rawText.match(/VE[IÍ]CULO(?:\s*DO\s*CLIENTE)?:\s*([^\n\r]+)/i);
     if (carMatch) {
       carModel = carMatch[1].trim();
     }
 
-    // 5. Extração de Itens / Autopeças
+    let clientPhone = '';
+    const phoneMatch =
+      rawText.match(/CONTATO(?:\s*DO\s*CLIENTE)?:\s*([^\n\r]+)/i) ||
+      rawText.match(/(?:(?:\+?55\s*)?(?:\(?\b[1-9]{2}\)?\s*)?(?:9\s*)?[2-9]\d{3}[-\s]?\d{4})/);
+    if (phoneMatch) {
+      const rawP = phoneMatch[1] ? phoneMatch[1].trim() : phoneMatch[0].trim();
+      clientPhone = formatPhone(rawP);
+    }
+
+    // Seção de Mercadorias
     const items: Array<{
       item_code?: string;
       item_name: string;
@@ -54,80 +44,87 @@ export class NativePdfParser {
       original_unit_cost: number;
     }> = [];
 
-    // Expressões regulares para linhas de itens típicas de sistemas automotivos:
-    // Ex: "NP-BD4120 JOGO PASTILHA FREIO DIANT FRAS-LE 1 UN 180,00 180,00"
-    // Ex: "001 10420 AMORTECEDOR COFAP 2.00 150.00 300.00"
-    for (const line of lines) {
-      // Ignora cabeçalhos
-      if (line.match(/CÓDIGO|DESCRIC|PRODUTO|QUANT|VALOR|TOTAL|SUBTOTAL|EMISSÃO/i) && line.length < 60) {
+    const mercSectionMatch = rawText.match(/Identificação das Mercadorias([\s\S]*?)Identificação do Cliente/i);
+    const mercText = mercSectionMatch ? mercSectionMatch[1] : rawText;
+
+    const lines = mercText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    let currentItem: { pendingDescription?: string } | null = null;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // Ignora headers
+      if (line.match(/PRODUTO|DESCRIÇÃO|SUB-TOTAL|DESCONTO|VALOR|QTD|EMITENTE|ESTABELECIMENTO/i) && line.length < 50) {
         continue;
       }
 
-      // Procura linha com valores monetários no final (ex: "150,00" ou "150.00")
-      const moneyMatches = line.match(/(?:R\$\s*)?(\d{1,5}[.,]\d{2})/g);
-      if (moneyMatches && moneyMatches.length >= 1) {
-        // Encontrou uma linha candidata a item
-        const lastMoney = moneyMatches[moneyMatches.length - 1].replace('R$', '').replace(',', '.').trim();
-        const unitMoney = moneyMatches.length >= 2 
-          ? moneyMatches[moneyMatches.length - 2].replace('R$', '').replace(',', '.').trim()
-          : lastMoney;
+      const numberEndMatch = line.match(/(\d+[.,]\d{2})\s+(\d+[.,]\d{2})\s+(\d+[.,]\d{2})(?:\s+(\d+[.,]\d{2}))?(?:\s+(\d+[.,]\d{2}))?$/);
 
-        const unitCost = parseFloat(unitMoney) || 0;
-        if (unitCost <= 0) continue;
+      if (numberEndMatch) {
+        const valuesStr = numberEndMatch[0];
+        const textBeforeValues = line.substring(0, line.length - valuesStr.length).trim();
 
-        // Procura quantidade
-        let qty = 1;
-        const qtyMatch = line.match(/(?:^|\s)(\d{1,3})(?:\s*(?:UN|PC|PÇ|CX|JG|PAR|KIT))?\s+(?:R\$\s*)?\d+[.,]\d{2}/i);
-        if (qtyMatch) {
-          qty = parseInt(qtyMatch[1], 10) || 1;
+        let fullDescription = textBeforeValues;
+        if (currentItem && currentItem.pendingDescription) {
+          fullDescription = currentItem.pendingDescription + ' ' + textBeforeValues;
+          currentItem = null;
         }
 
-        // Procura código do produto (palavra inicial com números/letras)
-        const codeMatch = line.match(/^([A-Za-z0-9\-_]{3,20})/);
-        const code = codeMatch ? cleanProductCode(codeMatch[1]) : '';
+        let code = '';
+        const codeMatch = fullDescription.match(/^([A-Za-z0-9\-_]+)/);
+        if (codeMatch) {
+          code = cleanProductCode(codeMatch[1]);
+        }
 
-        // Descrição do produto: remove valores monetários e código do início
-        let name = line
-          .replace(/^([A-Za-z0-9\-_]{3,20})/, '')
-          .replace(/(?:R\$\s*)?\d{1,5}[.,]\d{2}/g, '')
-          .replace(/\b(?:UN|PC|PÇ|CX|JG|PAR|KIT)\b/gi, '')
+        let cleanDesc = fullDescription
+          .replace(/^([A-Za-z0-9\-_]+)/, '')
+          .replace(/\([A-Za-z0-9\-_]+\)/g, '')
+          .replace(/\(\s*UN\s*/gi, '')
           .replace(/\s{2,}/g, ' ')
           .trim();
 
-        if (!name || name.length < 3) {
-          name = 'Peça Automotiva';
+        let brand = 'Original';
+        const brandHyphenMatch = cleanDesc.match(/-\s*([A-Za-z0-9\s\-]+)$/);
+        if (brandHyphenMatch) {
+          brand = brandHyphenMatch[1].trim();
+          cleanDesc = cleanDesc.replace(/-\s*([A-Za-z0-9\s\-]+)$/, '').trim();
         }
 
-        // Tenta detectar marcas conhecidas no nome
-        let brand = 'Original';
-        const brandList = ['COFAP', 'NAKATA', 'FRAS-LE', 'FRASLE', 'BOSCH', 'VALEO', 'SAMPEL', 'FREMAX', 'COBREQ', 'TECFIL', 'MANN', 'MAHLE', 'DAYCO', 'GATES', 'MONROE', 'TRW', 'MAGNETI MARELLI'];
-        for (const b of brandList) {
-          if (new RegExp(`\\b${b}\\b`, 'i').test(line)) {
-            brand = b;
-            break;
+        cleanDesc = cleanDesc.replace(/[()]/g, '').trim();
+
+        const qtd = parseFloat(numberEndMatch[1].replace(',', '.')) || 1;
+        const unitCost = parseFloat(numberEndMatch[2].replace(',', '.')) || 0;
+
+        if (unitCost > 0) {
+          items.push({
+            item_code: code,
+            item_name: cleanDesc || 'Peça Automotiva',
+            brand: brand,
+            quantity: qtd,
+            original_unit_cost: unitCost,
+          });
+        }
+      } else {
+        if (!line.match(/Identificação|PRODUTO|DESCRIÇÃO|ESTABELECIMENTO/i)) {
+          if (!currentItem) {
+            currentItem = { pendingDescription: line };
+          } else {
+            currentItem.pendingDescription += ' ' + line;
           }
         }
-
-        items.push({
-          item_code: code,
-          item_name: name,
-          brand: brand,
-          quantity: qty,
-          original_unit_cost: unitCost,
-        });
       }
     }
 
     const totalCost = items.reduce((sum, it) => sum + (it.original_unit_cost * it.quantity), 0);
 
     return {
-      original_invoice_number: originalInvoiceNumber,
-      client_name: clientName,
-      client_phone: clientPhone,
-      car_model: carModel,
+      original_invoice_number: docNumber || `DAV-${Date.now().toString().slice(-5)}`,
+      client_name: clientName || '',
+      client_phone: clientPhone || '',
+      car_model: carModel || '',
       items: items,
       total_original_cost: Number(totalCost.toFixed(2)),
-      notes: `Extraído nativamente do documento PDF (${items.length} itens encontrados).`,
+      notes: `Documento DAV processado (${items.length} itens extraídos).`,
     };
   }
 }

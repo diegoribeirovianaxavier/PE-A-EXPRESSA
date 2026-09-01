@@ -166,6 +166,9 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
       if (extracted.client_phone) {
         setClientPhone(extracted.client_phone);
       }
+      if (extracted.payment_method) {
+        setPaymentMethod(extracted.payment_method);
+      }
 
       // Preenche a tabela de itens
       if (extracted.items && extracted.items.length > 0) {
