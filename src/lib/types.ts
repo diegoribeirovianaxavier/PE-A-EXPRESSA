@@ -41,6 +41,7 @@ export interface PricingCalculationResult {
 
   // Etapa D
   max_installments: number;
+  max_installment_value: number;
   installment_value: number;
 
   // Etapa E

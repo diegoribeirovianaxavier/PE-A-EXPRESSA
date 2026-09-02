@@ -145,6 +145,7 @@ export class PricingEngine {
     const cardSaleTotal = subtotalWithFreight * (1 + cardFeePercent / 100);
 
     // Parcelamento no Cartão
+    const maxInstallmentValue = maxInstallments > 0 ? cardSaleTotal / maxInstallments : cardSaleTotal;
     const actualInstallments = Math.max(1, Math.min(maxInstallments, installmentsCount || 1));
     const installmentValue = actualInstallments > 0 ? cardSaleTotal / actualInstallments : cardSaleTotal;
 
@@ -228,6 +229,7 @@ export class PricingEngine {
       applied_card_fee_amount: Number(appliedCardFeeAmount.toFixed(2)),
 
       max_installments: maxInstallments,
+      max_installment_value: Number(maxInstallmentValue.toFixed(2)),
       installment_value: Number(installmentValue.toFixed(2)),
 
       pix_discount_percent: pixDiscountPercent,

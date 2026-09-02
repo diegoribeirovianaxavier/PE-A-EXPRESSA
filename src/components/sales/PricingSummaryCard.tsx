@@ -173,7 +173,7 @@ export const PricingSummaryCard: React.FC<PricingSummaryCardProps> = ({
         <div className="flex items-center justify-between py-1 border-b border-slate-100">
           <span className="text-slate-500">Condição de Parcelamento (Etapa D):</span>
           <span className="font-bold text-slate-800">
-            Até {calculation.max_installments}x de {formatCurrency(calculation.installment_value)} sem juros
+            Até {calculation.max_installments}x de {formatCurrency(calculation.max_installment_value || (calculation.card_sale_total / (calculation.max_installments || 1)))} sem juros
           </span>
         </div>
 

@@ -90,8 +90,9 @@ export function generateWhatsAppQuoteText(
     .join('\n');
 
   const cardTotalStr = formatNumberBR(calc.card_sale_total);
-  const maxInstallments = calc.max_installments;
-  const installmentValueStr = formatNumberBR(calc.installment_value);
+  const maxInstallments = calc.max_installments || 1;
+  const maxInstallmentVal = calc.max_installment_value || (calc.card_sale_total / maxInstallments);
+  const installmentValueStr = formatNumberBR(maxInstallmentVal);
   const pixTotalStr = formatNumberBR(calc.pix_sale_total);
 
   return `-----ORÇAMENTO VENDA------
