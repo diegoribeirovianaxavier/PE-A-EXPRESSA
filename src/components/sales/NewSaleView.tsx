@@ -341,7 +341,7 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
 
       <Row gutter={[20, 20]}>
         {/* Coluna Esquerda: Upload, OCR e Dados */}
-        <Col xs={24} lg={15} className="space-y-6">
+        <Col xs={24} lg={14} xl={14} className="space-y-6">
           {/* Módulo de Entrada do Orçamento (Upload ou Texto Manual) */}
           <Card
             title={
@@ -596,7 +596,7 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
         </Col>
 
         {/* Coluna Direita: Motor de Precificação & Orçamento WhatsApp */}
-        <Col xs={24} lg={9} className="space-y-6">
+        <Col xs={24} lg={10} xl={10} className="space-y-6">
           {/* Card do Motor de Precificação */}
           <PricingSummaryCard
             calculation={pricingCalculation}

@@ -1,20 +1,21 @@
 'use client';
 
 import React from 'react';
-import { Card, Descriptions, Tag, Typography, Divider, Alert, Space } from 'antd';
+import { Card, Tag, Typography, Divider, Space } from 'antd';
 import {
   DollarOutlined,
   ThunderboltOutlined,
   CreditCardOutlined,
-  CarOutlined,
   SafetyCertificateOutlined,
   ArrowUpOutlined,
   CheckCircleOutlined,
+  ShopOutlined,
+  RiseOutlined,
 } from '@ant-design/icons';
 import { PricingCalculationResult, PaymentMethod } from '@/lib/types';
 import { formatCurrency } from '@/lib/formatters';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 interface PricingSummaryCardProps {
   calculation: PricingCalculationResult;
@@ -26,147 +27,211 @@ export const PricingSummaryCard: React.FC<PricingSummaryCardProps> = ({
   paymentMethod,
 }) => {
   const isPix = paymentMethod === 'PIX' || paymentMethod === 'DINHEIRO';
+  const markupAmount = calculation.final_sale_total - calculation.original_cost_total;
+  const markupPercent =
+    calculation.original_cost_total > 0
+      ? (markupAmount / calculation.original_cost_total) * 100
+      : 0;
 
   return (
     <Card
       title={
-        <div className="flex items-center justify-between">
-          <Space>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Space size={8}>
             <DollarOutlined className="text-orange-500 text-lg" />
-            <span className="font-bold text-slate-800">Motor de Precificação (PEÇA EXPRESSA)</span>
+            <span className="font-bold text-slate-800 text-sm sm:text-base">
+              Motor de Precificação
+            </span>
           </Space>
-          <Tag color={isPix ? 'green' : 'blue'} className="px-3 py-1 font-semibold text-xs rounded-full">
-            {isPix ? '⚡ Pagamento no PIX / À Vista' : '💳 Pagamento no Cartão'}
+          <Tag
+            color={isPix ? 'green' : 'blue'}
+            className="px-2.5 py-0.5 font-semibold text-xs rounded-full m-0"
+          >
+            {isPix ? '⚡ PIX (À Vista)' : '💳 Cartão de Crédito'}
           </Tag>
         </div>
       }
-      className="shadow-sm border-slate-200"
-      bodyStyle={{ padding: '18px 20px' }}
+      className="shadow-sm border-slate-200 overflow-hidden"
+      bodyStyle={{ padding: '16px 18px' }}
     >
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-        {/* Card 1: Custo Original */}
-        <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
-          <Text type="secondary" className="text-xs uppercase font-medium">
-            1. Custo Original (Loja Física)
-          </Text>
-          <div className="text-xl font-bold text-slate-700 mt-1">
-            {formatCurrency(calculation.original_cost_total)}
+      {/* 3 Blocos Principais de Métricas com Design Moderno e Alinhado */}
+      <div className="flex flex-col gap-2.5 mb-4">
+        {/* Bloco 1: Custo Original */}
+        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+          <div className="min-w-0">
+            <div className="text-[11px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1">
+              <ShopOutlined /> 1. Custo Loja Física
+            </div>
+            <div className="text-xs text-slate-400 mt-0.5">
+              {calculation.total_items_count}{' '}
+              {calculation.total_items_count === 1 ? 'item' : 'itens'} na nota
+            </div>
           </div>
-          <Text className="text-xs text-slate-500 mt-0.5 block">
-            {calculation.total_items_count} {calculation.total_items_count === 1 ? 'item' : 'itens'} na nota
-          </Text>
-        </div>
-
-        {/* Card 2: Valor do Orçamento Convertido */}
-        <div className="p-3.5 bg-orange-50 border border-orange-200 rounded-xl">
-          <div className="flex items-center justify-between">
-            <Text type="secondary" className="text-xs uppercase font-medium text-orange-800">
-              2. Orçamento Convertido
-            </Text>
-            <Tag color="orange" className="text-[11px] font-mono m-0">
-              +{calculation.original_cost_total > 0 ? (((calculation.final_sale_total - calculation.original_cost_total) / calculation.original_cost_total) * 100).toFixed(1) : 0}%
-            </Tag>
-          </div>
-          <div className="text-xl font-bold text-orange-950 mt-1">
-            {formatCurrency(calculation.final_sale_total)}
-          </div>
-          <div className="text-xs text-orange-700 mt-0.5 flex justify-between">
-            <span>Acréscimo: +{formatCurrency(calculation.final_sale_total - calculation.original_cost_total)}</span>
-            <span>{isPix ? '⚡ No PIX' : `💳 ${calculation.installments_count || 1}x Cartão`}</span>
+          <div className="text-right flex-shrink-0">
+            <div className="text-lg sm:text-xl font-extrabold text-slate-700">
+              {formatCurrency(calculation.original_cost_total)}
+            </div>
           </div>
         </div>
 
-        {/* Card 3: Lucro Líquido Real */}
-        <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl">
-          <div className="flex items-center justify-between">
-            <Text className="text-xs uppercase font-bold text-emerald-800">
-              3. Lucro Líquido Real
-            </Text>
-            <Tag color="success" className="text-[11px] font-bold m-0 flex items-center gap-1">
-              <ArrowUpOutlined /> {calculation.net_margin_percent.toFixed(1)}%
-            </Tag>
+        {/* Bloco 2: Orçamento Convertido */}
+        <div className="p-3 bg-orange-50/70 border border-orange-200 rounded-xl flex items-center justify-between">
+          <div className="min-w-0">
+            <div className="text-[11px] uppercase font-bold text-orange-800 tracking-wider flex items-center gap-1">
+              <ThunderboltOutlined className="text-orange-500" /> 2. Orçamento Convertido
+            </div>
+            <div className="text-xs text-orange-700/90 mt-0.5 font-medium flex items-center gap-1.5">
+              <span>Acréscimo: +{formatCurrency(markupAmount)}</span>
+              <Tag color="orange" className="text-[10px] font-mono m-0 px-1 py-0">
+                +{markupPercent.toFixed(1)}%
+              </Tag>
+            </div>
           </div>
-          <div className="text-2xl font-black text-emerald-700 mt-1">
-            {formatCurrency(calculation.net_profit)}
+          <div className="text-right flex-shrink-0">
+            <div className="text-lg sm:text-xl font-black text-orange-950">
+              {formatCurrency(calculation.final_sale_total)}
+            </div>
           </div>
-          <Text className="text-xs text-emerald-600 mt-0.5 block">
-            Líquido livre (pós custo, frete e taxa)
-          </Text>
+        </div>
+
+        {/* Bloco 3: Lucro Líquido Real */}
+        <div className="p-3 bg-emerald-50/80 border border-emerald-300 rounded-xl flex items-center justify-between">
+          <div className="min-w-0">
+            <div className="text-[11px] uppercase font-bold text-emerald-800 tracking-wider flex items-center gap-1">
+              <RiseOutlined className="text-emerald-600" /> 3. Lucro Líquido Real
+            </div>
+            <div className="text-xs text-emerald-600 mt-0.5">
+              Livre no seu bolso (pós custo, frete e taxas)
+            </div>
+          </div>
+          <div className="text-right flex-shrink-0">
+            <div className="text-xl sm:text-2xl font-black text-emerald-700 flex items-center justify-end gap-1.5">
+              {formatCurrency(calculation.net_profit)}
+              <Tag color="success" className="text-[11px] font-bold m-0 px-1 py-0">
+                <ArrowUpOutlined /> {calculation.net_margin_percent.toFixed(1)}%
+              </Tag>
+            </div>
+          </div>
         </div>
       </div>
 
       <Divider className="my-3 border-slate-200" />
 
-      {/* Detalhamento das Etapas */}
-      <Descriptions size="small" column={{ xs: 1, sm: 2, md: 2 }} className="text-xs">
-        <Descriptions.Item label="Subtotal com Margem (Etapa A)">
-          <span className="font-semibold text-slate-700">{formatCurrency(calculation.subtotal_with_margin)}</span>
-        </Descriptions.Item>
-        <Descriptions.Item label="Frete Fixo Rateado (Etapa B)">
-          <span className="font-semibold text-slate-700">{formatCurrency(calculation.freight_cost)} ({formatCurrency(calculation.freight_per_item)}/peça)</span>
-        </Descriptions.Item>
-        <Descriptions.Item label="Preço Tabela no Cartão (Etapa C)">
-          <Space size={4}>
-            <span className="font-semibold text-blue-700">{formatCurrency(calculation.card_sale_total)}</span>
-            <Tag color="blue" className="text-[10px] m-0">Tabela até {calculation.max_installments}x</Tag>
-          </Space>
-        </Descriptions.Item>
-        <Descriptions.Item label={isPix ? "Taxa de Maquininha (PIX)" : `Taxa da Maquininha (${calculation.installments_count || 1}x selecionado)`}>
+      {/* Detalhamento Passo a Passo das Etapas (Sem quebra de linha feia) */}
+      <div className="space-y-2 text-xs">
+        <div className="flex items-center justify-between py-1 border-b border-slate-100">
+          <span className="text-slate-500">Subtotal com Margem (Etapa A):</span>
+          <span className="font-semibold text-slate-700">
+            {formatCurrency(calculation.subtotal_with_margin)}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between py-1 border-b border-slate-100">
+          <span className="text-slate-500">Frete Fixo Rateado (Etapa B):</span>
+          <span className="font-semibold text-slate-700">
+            {formatCurrency(calculation.freight_cost)}{' '}
+            <span className="text-slate-400 font-normal">
+              ({formatCurrency(calculation.freight_per_item)}/peça)
+            </span>
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between py-1 border-b border-slate-100">
+          <span className="text-slate-500">Preço Tabela no Cartão (Etapa C):</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold text-blue-700">
+              {formatCurrency(calculation.card_sale_total)}
+            </span>
+            <Tag color="blue" className="text-[10px] m-0 px-1 py-0 font-medium">
+              Até {calculation.max_installments}x
+            </Tag>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between py-1 border-b border-slate-100">
+          <span className="text-slate-500">
+            {isPix
+              ? 'Taxa da Maquininha (PIX):'
+              : `Taxa da Maquininha (${calculation.installments_count || 1}x):`}
+          </span>
           {isPix ? (
-            <Tag color="green" className="text-xs font-semibold m-0">
-              0.00% (Isento de Taxa de Máquina)
+            <Tag color="green" className="text-[11px] font-semibold m-0 px-1.5 py-0">
+              0.00% (Isento no PIX)
             </Tag>
           ) : (
-            <Space size={4}>
-              <span className="font-semibold text-red-600">-{formatCurrency(calculation.applied_card_fee_amount || calculation.card_fee_amount)}</span>
-              <Tag color="volcano" className="text-[10px] m-0 font-bold">
+            <div className="flex items-center gap-1.5">
+              <span className="font-semibold text-red-600">
+                -{formatCurrency(calculation.applied_card_fee_amount || calculation.card_fee_amount)}
+              </span>
+              <Tag color="volcano" className="text-[10px] m-0 font-bold px-1 py-0">
                 {calculation.applied_card_fee_percent || calculation.card_fee_percent}%
               </Tag>
-            </Space>
+            </div>
           )}
-        </Descriptions.Item>
-        <Descriptions.Item label="Condição de Parcelamento (Etapa D)">
-          <span className="font-semibold text-slate-800">
+        </div>
+
+        <div className="flex items-center justify-between py-1 border-b border-slate-100">
+          <span className="text-slate-500">Condição de Parcelamento (Etapa D):</span>
+          <span className="font-bold text-slate-800">
             Até {calculation.max_installments}x de {formatCurrency(calculation.installment_value)} sem juros
           </span>
-        </Descriptions.Item>
-        <Descriptions.Item label="Desconto PIX Aplicado (Etapa E)">
-          <Space size={4}>
-            <span className="font-semibold text-emerald-700">-{formatCurrency(calculation.pix_discount_amount)}</span>
-            <Tag color="green" className="text-[10px] m-0">-{calculation.pix_discount_percent}%</Tag>
-          </Space>
-        </Descriptions.Item>
-        <Descriptions.Item label="Garantia Padrão PEÇA EXPRESSA">
-          <Tag color="geekblue" icon={<SafetyCertificateOutlined />} className="text-xs">
+        </div>
+
+        <div className="flex items-center justify-between py-1 border-b border-slate-100">
+          <span className="text-slate-500">Desconto no PIX (Etapa E):</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold text-emerald-700">
+              -{formatCurrency(calculation.pix_discount_amount)}
+            </span>
+            <Tag color="green" className="text-[10px] m-0 font-bold px-1 py-0">
+              -{calculation.pix_discount_percent}%
+            </Tag>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between py-1">
+          <span className="text-slate-500">Garantia Padrão:</span>
+          <Tag
+            color="geekblue"
+            icon={<SafetyCertificateOutlined />}
+            className="text-xs m-0 px-2 py-0.5 font-medium"
+          >
             90 Dias Corridos
           </Tag>
-        </Descriptions.Item>
-      </Descriptions>
+        </div>
+      </div>
 
-      {/* Destaque do Valor Final */}
-      <div className="mt-4 p-4 rounded-xl bg-slate-900 text-white flex flex-col sm:flex-row items-center justify-between gap-3">
+      {/* Destaque do Valor Final a Cobrar */}
+      <div className="mt-4 p-3.5 rounded-xl bg-slate-900 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md">
         <div>
-          <div className="text-xs text-slate-400 uppercase tracking-wider font-semibold">
-            Valor Final a Cobrar do Cliente ({paymentMethod})
+          <div className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
+            Valor a Cobrar do Cliente ({isPix ? 'PIX' : 'Cartão'})
           </div>
           <div className="text-2xl sm:text-3xl font-black text-orange-400 mt-0.5">
             {formatCurrency(calculation.final_sale_total)}
           </div>
         </div>
-        <div className="text-right">
+        <div className="w-full sm:w-auto text-left sm:text-right">
           {isPix ? (
-            <div className="bg-emerald-950/80 border border-emerald-600/50 rounded-lg px-3 py-1.5 text-emerald-400 text-xs">
+            <div className="bg-emerald-950/80 border border-emerald-600/50 rounded-lg px-2.5 py-1.5 text-emerald-400 text-xs inline-block sm:block">
               <span className="font-bold flex items-center gap-1">
-                <CheckCircleOutlined /> Desconto de {calculation.pix_discount_percent}% aplicado
+                <CheckCircleOutlined /> Desconto de {calculation.pix_discount_percent}%
               </span>
-              <span>Economia de {formatCurrency(calculation.pix_discount_amount)}</span>
+              <span className="text-[11px] block text-emerald-300">
+                Economia: {formatCurrency(calculation.pix_discount_amount)}
+              </span>
             </div>
           ) : (
-            <div className="bg-blue-950/80 border border-blue-600/50 rounded-lg px-3 py-1.5 text-blue-300 text-xs">
-              <span className="font-bold">
-                {calculation.max_installments}x de {formatCurrency(calculation.installment_value)}
+            <div className="bg-blue-950/80 border border-blue-600/50 rounded-lg px-2.5 py-1.5 text-blue-300 text-xs inline-block sm:block">
+              <span className="font-bold block">
+                {calculation.installments_count || 1}x de{' '}
+                {formatCurrency(
+                  calculation.card_sale_total / (calculation.installments_count || 1)
+                )}
               </span>
-              <span className="block text-[11px] text-blue-400">Sem juros no cartão de crédito</span>
+              <span className="text-[10px] text-blue-400 block">
+                Sem juros no cartão
+              </span>
             </div>
           )}
         </div>
