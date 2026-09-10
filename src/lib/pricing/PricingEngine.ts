@@ -1,7 +1,7 @@
 import { CalculatedSaleItem, PaymentMethod, PricingCalculationResult, SaleItemInput } from '../types';
 
 export class PricingEngine {
-  public static readonly FIXED_FREIGHT = 15.00;
+  public static readonly FIXED_FREIGHT = 20.00;
 
   /**
    * Etapa A: Retorna a % de margem bruta baseada no custo original total

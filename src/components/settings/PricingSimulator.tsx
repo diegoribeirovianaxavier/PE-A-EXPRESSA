@@ -184,7 +184,7 @@ export const PricingSimulator: React.FC = () => {
                 </div>
                 <div className="flex justify-between items-center text-slate-700">
                   <span>4. Frete Fixo (Etapa B):</span>
-                  <span className="font-semibold">+R$ 15,00 ({formatCurrency(calculation.freight_per_item)}/peça)</span>
+                  <span className="font-semibold">+{formatCurrency(calculation.freight_cost)} ({formatCurrency(calculation.freight_per_item)}/peça)</span>
                 </div>
                 <div className="flex justify-between items-center text-blue-700">
                   <span>5. Total no Cartão (Etapa C / +{calculation.card_fee_percent}%):</span>
