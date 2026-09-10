@@ -61,28 +61,28 @@ export class PricingEngine {
     pixDiscountPercent: number;
   } {
     // Avalia as faixas pelo valor final já convertido:
-    // Faixa 6: A partir de R$ 1.000,00 -> Até 10x | Taxa: 11.06% | PIX: 10.00%
+    // Faixa 6: A partir de R$ 1.000,00 -> Até 10x | Taxa: 11.06% | PIX: 9.01%
     if (subtotalWithFreight * 1.1106 >= 1000.00) {
-      return { cardFeePercent: 11.06, maxInstallments: 10, pixDiscountPercent: 10.00 };
+      return { cardFeePercent: 11.06, maxInstallments: 10, pixDiscountPercent: 9.01 };
     }
-    // Faixa 5: R$ 600,00 até R$ 999,99 -> Até 6x | Taxa: 8.28% | PIX: 9.67%
+    // Faixa 5: R$ 600,00 até R$ 999,99 -> Até 6x | Taxa: 8.28% | PIX: 8.50%
     if (subtotalWithFreight * 1.0828 >= 600.00) {
-      return { cardFeePercent: 8.28, maxInstallments: 6, pixDiscountPercent: 9.67 };
+      return { cardFeePercent: 8.28, maxInstallments: 6, pixDiscountPercent: 8.50 };
     }
-    // Faixa 4: R$ 500,00 até R$ 599,99 -> Até 5x | Taxa: 7.57% | PIX: 8.80%
+    // Faixa 4: R$ 500,00 até R$ 599,99 -> Até 5x | Taxa: 7.57% | PIX: 7.71%
     if (subtotalWithFreight * 1.0757 >= 500.00) {
-      return { cardFeePercent: 7.57, maxInstallments: 5, pixDiscountPercent: 8.80 };
+      return { cardFeePercent: 7.57, maxInstallments: 5, pixDiscountPercent: 7.71 };
     }
-    // Faixa 3: R$ 400,00 até R$ 499,99 -> Até 4x | Taxa: 6.85% | PIX: 7.91%
+    // Faixa 3: R$ 400,00 até R$ 499,99 -> Até 4x | Taxa: 6.85% | PIX: 7.01%
     if (subtotalWithFreight * 1.0685 >= 400.00) {
-      return { cardFeePercent: 6.85, maxInstallments: 4, pixDiscountPercent: 7.91 };
+      return { cardFeePercent: 6.85, maxInstallments: 4, pixDiscountPercent: 7.01 };
     }
-    // Faixa 2: R$ 150,00 até R$ 399,99 -> Até 3x | Taxa: 6.12% | PIX: 7.01%
+    // Faixa 2: R$ 150,00 até R$ 399,99 -> Até 3x | Taxa: 6.12% | PIX: 6.45%
     if (subtotalWithFreight * 1.0612 >= 150.00) {
-      return { cardFeePercent: 6.12, maxInstallments: 3, pixDiscountPercent: 7.01 };
+      return { cardFeePercent: 6.12, maxInstallments: 3, pixDiscountPercent: 6.45 };
     }
-    // Faixa 1: Até R$ 149,99 -> Até 2x | Taxa: 5.39% | PIX: 6.09%
-    return { cardFeePercent: 5.39, maxInstallments: 2, pixDiscountPercent: 6.09 };
+    // Faixa 1: Até R$ 149,99 -> Até 2x | Taxa: 5.39% | PIX: 5.85%
+    return { cardFeePercent: 5.39, maxInstallments: 2, pixDiscountPercent: 5.85 };
   }
 
   /**

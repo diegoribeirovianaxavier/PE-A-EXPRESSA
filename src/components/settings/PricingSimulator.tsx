@@ -92,12 +92,12 @@ export const PricingSimulator: React.FC = () => {
   ];
 
   const cardFeeData = [
-    { key: '1', range: 'Até R$ 149,99', fee: '+5.39%', installments: 'Até 2x', pixDiscount: '6.09%' },
-    { key: '2', range: 'R$ 150,00 a R$ 399,99', fee: '+6.12%', installments: 'Até 3x', pixDiscount: '7.01%' },
-    { key: '3', range: 'R$ 400,00 a R$ 499,99', fee: '+6.85%', installments: 'Até 4x', pixDiscount: '7.91%' },
-    { key: '4', range: 'R$ 500,00 a R$ 599,99', fee: '+7.57%', installments: 'Até 5x', pixDiscount: '8.80%' },
-    { key: '5', range: 'R$ 600,00 a R$ 999,99', fee: '+8.28%', installments: 'Até 6x', pixDiscount: '9.67%' },
-    { key: '6', range: 'A partir de R$ 1.000,00', fee: '+11.06%', installments: 'Até 10x', pixDiscount: '10.00%' },
+    { key: '1', range: 'Até R$ 149,99', fee: '+5.39%', installments: 'Até 2x', pixDiscount: '5.85%' },
+    { key: '2', range: 'R$ 150,00 a R$ 399,99', fee: '+6.12%', installments: 'Até 3x', pixDiscount: '6.45%' },
+    { key: '3', range: 'R$ 400,00 a R$ 499,99', fee: '+6.85%', installments: 'Até 4x', pixDiscount: '7.01%' },
+    { key: '4', range: 'R$ 500,00 a R$ 599,99', fee: '+7.57%', installments: 'Até 5x', pixDiscount: '7.71%' },
+    { key: '5', range: 'R$ 600,00 a R$ 999,99', fee: '+8.28%', installments: 'Até 6x', pixDiscount: '8.50%' },
+    { key: '6', range: 'A partir de R$ 1.000,00', fee: '+11.06%', installments: 'Até 10x', pixDiscount: '9.01%' },
   ];
 
   return (
