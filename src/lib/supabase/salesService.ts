@@ -4,7 +4,7 @@ import dayjs from 'dayjs';
 
 const LOCAL_STORAGE_SALES_KEY = 'peca_expressa_sales_v1';
 
-// Dados de exemplo para modo de demonstração quando não houver banco conectado
+// Dados de demonstração offline somente quando o banco NÃO estiver configurado
 const INITIAL_DEMO_SALES: Sale[] = [
   {
     id: 'a0000001-0000-0000-0000-000000000001',
@@ -29,7 +29,7 @@ const INITIAL_DEMO_SALES: Sale[] = [
     notes: 'Entrega expressa realizada via motoboy no Centro.',
     items: [
       {
-        id: 'item-101',
+        id: '10000000-0000-0000-0000-000000000001',
         sale_id: 'a0000001-0000-0000-0000-000000000001',
         item_code: 'BD4120',
         item_name: 'Jogo de Pastilhas de Freio Dianteiras',
@@ -40,52 +40,6 @@ const INITIAL_DEMO_SALES: Sale[] = [
         final_total_price: 215.75,
       }
     ]
-  },
-  {
-    id: 'a0000002-0000-0000-0000-000000000002',
-    created_at: dayjs().subtract(2, 'day').toISOString(),
-    sale_date: dayjs().subtract(2, 'day').format('YYYY-MM-DD'),
-    original_invoice_number: 'NF-89455',
-    client_name: 'Mariana Costa Ramos',
-    client_phone: '(21) 99123-8877',
-    car_model: 'Corolla 1.8 2016',
-    payment_method: 'CARTAO',
-    installments_count: 3,
-    original_cost_total: 350.00,
-    profit_margin_percent: 8.50,
-    freight_cost: 20.00,
-    card_fee_percent: 6.12,
-    pix_discount_percent: 6.45,
-    final_sale_total: 419.00,
-    net_profit: 28.36,
-    warranty_deadline: dayjs().subtract(2, 'day').add(90, 'day').format('YYYY-MM-DD'),
-    invoice_file_url: 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?w=800&auto=format&fit=crop&q=80',
-    status: 'CONCLUIDO',
-    notes: 'Parcelado em 3x sem juros na maquininha.',
-    items: [
-      {
-        id: 'item-201',
-        sale_id: 'a0000002-0000-0000-0000-000000000002',
-        item_code: 'AM8920',
-        item_name: 'Amortecedor Dianteiro Direito',
-        brand: 'Cofap',
-        quantity: 1,
-        original_unit_cost: 250.00,
-        final_unit_price: 299.28,
-        final_total_price: 299.28,
-      },
-      {
-        id: 'item-202',
-        sale_id: 'a0000002-0000-0000-0000-000000000002',
-        item_code: 'KT441',
-        item_name: 'Kit Coxim e Batente do Amortecedor',
-        brand: 'Sampel',
-        quantity: 1,
-        original_unit_cost: 100.00,
-        final_unit_price: 119.72,
-        final_total_price: 119.72,
-      }
-    ]
   }
 ];
 
@@ -94,12 +48,11 @@ function getLocalStorageSales(): Sale[] {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_SALES_KEY);
     if (!raw) {
-      localStorage.setItem(LOCAL_STORAGE_SALES_KEY, JSON.stringify(INITIAL_DEMO_SALES));
-      return INITIAL_DEMO_SALES;
+      return [];
     }
     return JSON.parse(raw);
   } catch {
-    return INITIAL_DEMO_SALES;
+    return [];
   }
 }
 
@@ -114,53 +67,52 @@ function saveLocalStorageSales(sales: Sale[]): void {
 
 export class SalesService {
   /**
-   * Busca todas as vendas com seus respectivos itens diretamente do Supabase ou Fallback
+   * Busca todas as vendas com seus respectivos itens diretamente do Supabase oficial
    */
   public static async getAllSales(): Promise<Sale[]> {
+    const config = getSupabaseConfig();
     const supabase = getSupabaseClient();
     
-    if (supabase) {
-      try {
-        const { data: sales, error: salesErr } = await supabase
-          .from('sales')
-          .select(`
-            *,
-            items:sale_items(*)
-          `)
-          .order('sale_date', { ascending: false })
-          .order('created_at', { ascending: false });
+    if (config.isConfigured && supabase) {
+      const { data: sales, error: salesErr } = await supabase
+        .from('sales')
+        .select(`
+          *,
+          items:sale_items(*)
+        `)
+        .order('sale_date', { ascending: false })
+        .order('created_at', { ascending: false });
 
-        if (!salesErr && sales) {
-          return sales as Sale[];
-        }
-        
-        console.error('Falha na consulta ao Supabase:', salesErr?.message);
-        throw new Error(`Erro Supabase: ${salesErr?.message}`);
-      } catch (err) {
-        console.warn('Utilizando dados locais como fallback após falha no Supabase:', err);
+      if (salesErr) {
+        console.error('Erro ao buscar vendas no Supabase:', salesErr);
+        throw new Error(`Falha no Supabase: ${salesErr.message} (Código: ${salesErr.code})`);
       }
+
+      return (sales || []) as Sale[];
     }
 
+    // Modo offline local quando Supabase não estiver configurado
     return getLocalStorageSales();
   }
 
   /**
-   * Cria uma nova venda com seus itens e anexo no Supabase oficial
+   * Cria uma nova venda com seus itens e anexo no Supabase oficial via .insert()
    */
   public static async createSale(
     saleData: Omit<Sale, 'id' | 'created_at'>,
     items: CalculatedSaleItem[],
     file?: File
   ): Promise<Sale> {
+    const config = getSupabaseConfig();
     const supabase = getSupabaseClient();
     let invoiceFileUrl = saleData.invoice_file_url || '';
 
-    // Upload de arquivo para o bucket 'invoices' do Supabase Storage
-    if (file && supabase) {
+    // 1. Upload de anexo/comprovante para o Supabase Storage se arquivo presente
+    if (file && config.isConfigured && supabase) {
       try {
-        const fileExt = file.name.split('.').pop();
-        const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-        const fileName = `${Date.now()}_${safeName}`;
+        const fileExt = file.name.split('.').pop() || 'jpg';
+        const cleanName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const fileName = `${Date.now()}_${cleanName}`;
         const filePath = `invoices/${fileName}`;
 
         const { error: uploadErr } = await supabase.storage
@@ -186,7 +138,7 @@ export class SalesService {
       }
     }
 
-    // Se o arquivo foi enviado localmente e não há Supabase Storage, converte para blob url
+    // Fallback de URL local caso não haja storage na nuvem
     if (file && !invoiceFileUrl) {
       try {
         invoiceFileUrl = URL.createObjectURL(file);
@@ -195,16 +147,82 @@ export class SalesService {
       }
     }
 
-    const newSaleId = crypto.randomUUID ? crypto.randomUUID() : `sale-${Date.now()}`;
-    const createdAt = new Date().toISOString();
+    // 2. Gravação Oficial no Supabase
+    if (config.isConfigured && supabase) {
+      const saleRowToInsert = {
+        sale_date: saleData.sale_date || dayjs().format('YYYY-MM-DD'),
+        original_invoice_number: saleData.original_invoice_number || '',
+        client_name: saleData.client_name || 'Cliente Sem Nome',
+        client_phone: saleData.client_phone || '',
+        car_model: saleData.car_model || '',
+        payment_method: saleData.payment_method || 'PIX',
+        installments_count: Number(saleData.installments_count) || 1,
+        original_cost_total: Number(saleData.original_cost_total) || 0,
+        profit_margin_percent: Number(saleData.profit_margin_percent) || 0,
+        freight_cost: Number(saleData.freight_cost) || 20,
+        card_fee_percent: Number(saleData.card_fee_percent) || 0,
+        pix_discount_percent: Number(saleData.pix_discount_percent) || 0,
+        final_sale_total: Number(saleData.final_sale_total) || 0,
+        net_profit: Number(saleData.net_profit) || 0,
+        warranty_deadline: saleData.warranty_deadline || dayjs().add(90, 'day').format('YYYY-MM-DD'),
+        invoice_file_url: invoiceFileUrl,
+        status: saleData.status || 'CONCLUIDO',
+        notes: saleData.notes || '',
+      };
 
+      // Inserção da venda principal retornando o registro criado com seu UUID gerado pelo PostgreSQL
+      const { data: insertedSale, error: saleInsertErr } = await supabase
+        .from('sales')
+        .insert(saleRowToInsert)
+        .select()
+        .single();
+
+      if (saleInsertErr || !insertedSale) {
+        console.error('Erro ao inserir venda no Supabase:', saleInsertErr);
+        throw new Error(`Erro ao salvar venda no Supabase: ${saleInsertErr?.message || 'Sem resposta do banco'}`);
+      }
+
+      // Inserção dos itens filhos vinculados ao sale_id retornado
+      let insertedItems: SaleItem[] = [];
+      if (items && items.length > 0) {
+        const itemsToInsert = items.map(it => ({
+          sale_id: insertedSale.id,
+          item_code: (it.item_code || '').replace(/^NP/i, '').trim(),
+          item_name: it.item_name || 'Peça Automotiva',
+          brand: it.brand || 'Original',
+          quantity: Number(it.quantity) || 1,
+          original_unit_cost: Number(it.original_unit_cost) || 0,
+          final_unit_price: Number(it.final_unit_price) || 0,
+          final_total_price: Number(it.final_total_price) || 0,
+        }));
+
+        const { data: dbItems, error: itemsInsertErr } = await supabase
+          .from('sale_items')
+          .insert(itemsToInsert)
+          .select();
+
+        if (itemsInsertErr) {
+          console.error('Erro ao inserir itens no Supabase:', itemsInsertErr);
+        } else if (dbItems) {
+          insertedItems = dbItems as SaleItem[];
+        }
+      }
+
+      return {
+        ...insertedSale,
+        items: insertedItems,
+      } as Sale;
+    }
+
+    // 3. Fallback Offline Local Storage se banco não estiver configurado
+    const newSaleId = `sale-${Date.now()}`;
     const completeSale: Sale = {
       ...saleData,
       id: newSaleId,
-      created_at: createdAt,
+      created_at: new Date().toISOString(),
       invoice_file_url: invoiceFileUrl,
       items: items.map((it, idx) => ({
-        id: it.id || crypto.randomUUID ? crypto.randomUUID() : `item-${Date.now()}-${idx}`,
+        id: `item-${Date.now()}-${idx}`,
         sale_id: newSaleId,
         item_code: it.item_code || '',
         item_name: it.item_name,
@@ -216,59 +234,6 @@ export class SalesService {
       })),
     };
 
-    if (supabase) {
-      // 1. Inserir Registro Principal da Venda
-      const { error: saleInsertErr } = await supabase.from('sales').insert({
-        id: completeSale.id,
-        sale_date: completeSale.sale_date,
-        original_invoice_number: completeSale.original_invoice_number,
-        client_name: completeSale.client_name,
-        client_phone: completeSale.client_phone,
-        car_model: completeSale.car_model,
-        payment_method: completeSale.payment_method,
-        installments_count: completeSale.installments_count || 1,
-        original_cost_total: completeSale.original_cost_total,
-        profit_margin_percent: completeSale.profit_margin_percent,
-        freight_cost: completeSale.freight_cost,
-        card_fee_percent: completeSale.card_fee_percent,
-        pix_discount_percent: completeSale.pix_discount_percent,
-        final_sale_total: completeSale.final_sale_total,
-        net_profit: completeSale.net_profit,
-        warranty_deadline: completeSale.warranty_deadline,
-        invoice_file_url: completeSale.invoice_file_url,
-        status: completeSale.status || 'CONCLUIDO',
-        notes: completeSale.notes || '',
-      });
-
-      if (saleInsertErr) {
-        throw new Error(`Erro ao salvar venda no Supabase: ${saleInsertErr.message}`);
-      }
-
-      // 2. Inserir os Itens da Venda
-      if (completeSale.items && completeSale.items.length > 0) {
-        const { error: itemsInsertErr } = await supabase.from('sale_items').insert(
-          completeSale.items.map(it => ({
-            id: it.id,
-            sale_id: completeSale.id,
-            item_code: it.item_code || '',
-            item_name: it.item_name,
-            brand: it.brand || 'Original',
-            quantity: it.quantity,
-            original_unit_cost: it.original_unit_cost,
-            final_unit_price: it.final_unit_price,
-            final_total_price: it.final_total_price,
-          }))
-        );
-
-        if (itemsInsertErr) {
-          console.warn('Erro ao inserir itens no Supabase:', itemsInsertErr.message);
-        }
-      }
-
-      return completeSale;
-    }
-
-    // Fallback Local Storage caso não configurado
     const existing = getLocalStorageSales();
     const updated = [completeSale, ...existing];
     saveLocalStorageSales(updated);
@@ -276,12 +241,13 @@ export class SalesService {
   }
 
   /**
-   * Exclui uma venda e seus itens no Supabase
+   * Exclui uma venda e seus itens no Supabase oficial
    */
   public static async deleteSale(saleId: string): Promise<boolean> {
+    const config = getSupabaseConfig();
     const supabase = getSupabaseClient();
     
-    if (supabase) {
+    if (config.isConfigured && supabase) {
       const { error } = await supabase.from('sales').delete().eq('id', saleId);
       if (error) {
         throw new Error(`Erro ao excluir venda no Supabase: ${error.message}`);
@@ -296,37 +262,44 @@ export class SalesService {
   }
 
   /**
-   * Escuta alterações em tempo real no banco do Supabase (para sincronizar computadores)
+   * Inscrição Realtime no canal do Supabase (atualiza todos os computadores instantaneamente)
    */
   public static subscribeToSales(onChange: () => void): () => void {
     const supabase = getSupabaseClient();
     if (!supabase) return () => {};
 
-    const channel = supabase
-      .channel('sales_realtime_changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'sales' },
-        () => {
-          onChange();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'sale_items' },
-        () => {
-          onChange();
-        }
-      )
-      .subscribe();
+    try {
+      const channel = supabase
+        .channel('sales_realtime_channel')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'sales' },
+          (payload) => {
+            console.log('Realtime update recebido em sales:', payload.eventType);
+            onChange();
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'sale_items' },
+          (payload) => {
+            console.log('Realtime update recebido em sale_items:', payload.eventType);
+            onChange();
+          }
+        )
+        .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    } catch (err) {
+      console.warn('Erro ao configurar canal realtime do Supabase:', err);
+      return () => {};
+    }
   }
 
   /**
-   * Reseta os dados locais para os dados de demonstração iniciais
+   * Reseta os dados locais para demonstração
    */
   public static resetToDemoData(): Sale[] {
     saveLocalStorageSales(INITIAL_DEMO_SALES);
