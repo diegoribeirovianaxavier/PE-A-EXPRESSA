@@ -276,8 +276,8 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
       } catch {}
 
       notification.success({
-        message: 'Venda Registrada com Sucesso!',
-        description: `Ordem gravada no sistema. Garantia de 90 dias ativa até ${dayjs(warrantyDeadline).format('DD/MM/YYYY')}.`,
+        message: 'Venda Gravada no Supabase!',
+        description: `Ordem salva com sucesso no banco de dados da nuvem. Garantia de 90 dias ativa até ${dayjs(warrantyDeadline).format('DD/MM/YYYY')}.`,
         placement: 'topRight',
       });
 
@@ -305,7 +305,13 @@ export const NewSaleView: React.FC<NewSaleViewProps> = ({ onSaleSaved }) => {
       if (err.errorFields) {
         message.warning('Por favor, preencha todos os campos obrigatórios do formulário.');
       } else {
-        message.error(`Erro ao salvar venda: ${err.message || 'Erro desconhecido'}`);
+        console.error('Erro detalhado ao salvar venda:', err);
+        notification.error({
+          message: 'Erro ao Gravar no Supabase',
+          description: err.message || 'Não foi possível inserir os dados nas tabelas do Supabase. Verifique se o script SQL foi executado com RLS desativado.',
+          duration: 8,
+          placement: 'topRight',
+        });
       }
     } finally {
       setIsSaving(false);
