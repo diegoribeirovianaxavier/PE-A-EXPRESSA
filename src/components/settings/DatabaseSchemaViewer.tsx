@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS public.sales (
   -- Valores Financeiros
   original_cost_total NUMERIC(10,2) NOT NULL,
   profit_margin_percent NUMERIC(5,2) NOT NULL,
-  freight_cost NUMERIC(10,2) DEFAULT 15.00,
+  freight_cost NUMERIC(10,2) DEFAULT 20.00,
   card_fee_percent NUMERIC(5,2) DEFAULT 0.00,
   pix_discount_percent NUMERIC(5,2) DEFAULT 0.00,
   final_sale_total NUMERIC(10,2) NOT NULL,
