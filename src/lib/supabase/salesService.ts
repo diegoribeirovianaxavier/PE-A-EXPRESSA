@@ -1,10 +1,10 @@
-import { getSupabaseClient, isSupabaseConfigured } from './client';
+import { getSupabaseClient, getSupabaseConfig } from './client';
 import { Sale, SaleItem, CalculatedSaleItem } from '../types';
 import dayjs from 'dayjs';
 
 const LOCAL_STORAGE_SALES_KEY = 'peca_expressa_sales_v1';
 
-// Dados de exemplo iniciais para testes imediatos
+// Dados de exemplo para modo de demonstração quando não houver banco conectado
 const INITIAL_DEMO_SALES: Sale[] = [
   {
     id: 'a0000001-0000-0000-0000-000000000001',
@@ -18,9 +18,9 @@ const INITIAL_DEMO_SALES: Sale[] = [
     installments_count: 1,
     original_cost_total: 180.00,
     profit_margin_percent: 13.00,
-    freight_cost: 15.00,
+    freight_cost: 20.00,
     card_fee_percent: 6.12,
-    pix_discount_percent: 7.01,
+    pix_discount_percent: 6.45,
     final_sale_total: 215.75,
     net_profit: 20.75,
     warranty_deadline: dayjs().subtract(5, 'day').add(90, 'day').format('YYYY-MM-DD'),
@@ -53,9 +53,9 @@ const INITIAL_DEMO_SALES: Sale[] = [
     installments_count: 3,
     original_cost_total: 350.00,
     profit_margin_percent: 8.50,
-    freight_cost: 15.00,
+    freight_cost: 20.00,
     card_fee_percent: 6.12,
-    pix_discount_percent: 7.01,
+    pix_discount_percent: 6.45,
     final_sale_total: 419.00,
     net_profit: 28.36,
     warranty_deadline: dayjs().subtract(2, 'day').add(90, 'day').format('YYYY-MM-DD'),
@@ -86,74 +86,6 @@ const INITIAL_DEMO_SALES: Sale[] = [
         final_total_price: 119.72,
       }
     ]
-  },
-  {
-    id: 'a0000003-0000-0000-0000-000000000003',
-    created_at: dayjs().subtract(78, 'day').toISOString(),
-    sale_date: dayjs().subtract(78, 'day').format('YYYY-MM-DD'),
-    original_invoice_number: 'NF-88102',
-    client_name: 'Roberto Mendes',
-    client_phone: '(21) 97555-1234',
-    car_model: 'Onix 1.0 Turbo 2021',
-    payment_method: 'PIX',
-    installments_count: 1,
-    original_cost_total: 85.00,
-    profit_margin_percent: 17.00,
-    freight_cost: 15.00,
-    card_fee_percent: 5.39,
-    pix_discount_percent: 6.09,
-    final_sale_total: 113.10,
-    net_profit: 13.10,
-    warranty_deadline: dayjs().subtract(78, 'day').add(90, 'day').format('YYYY-MM-DD'),
-    status: 'CONCLUIDO',
-    notes: 'Garantia próxima do vencimento (restam ~12 dias).',
-    items: [
-      {
-        id: 'item-301',
-        sale_id: 'a0000003-0000-0000-0000-000000000003',
-        item_code: 'FL550',
-        item_name: 'Filtro de Óleo Lubrificante',
-        brand: 'Mann Filter',
-        quantity: 1,
-        original_unit_cost: 85.00,
-        final_unit_price: 113.10,
-        final_total_price: 113.10,
-      }
-    ]
-  },
-  {
-    id: 'a0000004-0000-0000-0000-000000000004',
-    created_at: dayjs().subtract(95, 'day').toISOString(),
-    sale_date: dayjs().subtract(95, 'day').format('YYYY-MM-DD'),
-    original_invoice_number: 'NF-87320',
-    client_name: 'Fernanda Oliveira',
-    client_phone: '(21) 98111-9988',
-    car_model: 'HB20 1.6 2019',
-    payment_method: 'CARTAO',
-    installments_count: 5,
-    original_cost_total: 520.00,
-    profit_margin_percent: 6.50,
-    freight_cost: 15.00,
-    card_fee_percent: 7.57,
-    pix_discount_percent: 8.80,
-    final_sale_total: 611.88,
-    net_profit: 30.50,
-    warranty_deadline: dayjs().subtract(95, 'day').add(90, 'day').format('YYYY-MM-DD'),
-    status: 'CONCLUIDO',
-    notes: 'Garantia de 90 dias expirada.',
-    items: [
-      {
-        id: 'item-401',
-        sale_id: 'a0000004-0000-0000-0000-000000000004',
-        item_code: 'EM901',
-        item_name: 'Kit de Embreagem Platô e Disco',
-        brand: 'Valeo',
-        quantity: 1,
-        original_unit_cost: 520.00,
-        final_unit_price: 611.88,
-        final_total_price: 611.88,
-      }
-    ]
   }
 ];
 
@@ -182,7 +114,7 @@ function saveLocalStorageSales(sales: Sale[]): void {
 
 export class SalesService {
   /**
-   * Busca todas as vendas com seus respectivos itens
+   * Busca todas as vendas com seus respectivos itens diretamente do Supabase ou Fallback
    */
   public static async getAllSales(): Promise<Sale[]> {
     const supabase = getSupabaseClient();
@@ -195,14 +127,17 @@ export class SalesService {
             *,
             items:sale_items(*)
           `)
-          .order('sale_date', { ascending: false });
+          .order('sale_date', { ascending: false })
+          .order('created_at', { ascending: false });
 
         if (!salesErr && sales) {
           return sales as Sale[];
         }
-        console.warn('Falha na consulta do Supabase, utilizando fallback local:', salesErr?.message);
+        
+        console.error('Falha na consulta ao Supabase:', salesErr?.message);
+        throw new Error(`Erro Supabase: ${salesErr?.message}`);
       } catch (err) {
-        console.warn('Erro ao conectar com Supabase, utilizando fallback local:', err);
+        console.warn('Utilizando dados locais como fallback após falha no Supabase:', err);
       }
     }
 
@@ -210,7 +145,7 @@ export class SalesService {
   }
 
   /**
-   * Cria uma nova venda com seus itens e anexo
+   * Cria uma nova venda com seus itens e anexo no Supabase oficial
    */
   public static async createSale(
     saleData: Omit<Sale, 'id' | 'created_at'>,
@@ -224,14 +159,15 @@ export class SalesService {
     if (file && supabase) {
       try {
         const fileExt = file.name.split('.').pop();
-        const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+        const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const fileName = `${Date.now()}_${safeName}`;
         const filePath = `invoices/${fileName}`;
 
         const { error: uploadErr } = await supabase.storage
           .from('invoices')
           .upload(filePath, file, {
             cacheControl: '3600',
-            upsert: false,
+            upsert: true,
           });
 
         if (!uploadErr) {
@@ -243,14 +179,14 @@ export class SalesService {
             invoiceFileUrl = publicUrlData.publicUrl;
           }
         } else {
-          console.warn('Erro ao fazer upload para o Supabase Storage:', uploadErr.message);
+          console.warn('Aviso no upload do Supabase Storage:', uploadErr.message);
         }
       } catch (err) {
-        console.warn('Erro durante upload de imagem:', err);
+        console.warn('Erro durante upload de imagem para o Supabase Storage:', err);
       }
     }
 
-    // Se o arquivo foi enviado localmente e não há Supabase Storage, converte para base64/blob url
+    // Se o arquivo foi enviado localmente e não há Supabase Storage, converte para blob url
     if (file && !invoiceFileUrl) {
       try {
         invoiceFileUrl = URL.createObjectURL(file);
@@ -268,7 +204,7 @@ export class SalesService {
       created_at: createdAt,
       invoice_file_url: invoiceFileUrl,
       items: items.map((it, idx) => ({
-        id: it.id || `item-${Date.now()}-${idx}`,
+        id: it.id || crypto.randomUUID ? crypto.randomUUID() : `item-${Date.now()}-${idx}`,
         sale_id: newSaleId,
         item_code: it.item_code || '',
         item_name: it.item_name,
@@ -281,60 +217,58 @@ export class SalesService {
     };
 
     if (supabase) {
-      try {
-        const { error: saleInsertErr } = await supabase.from('sales').insert({
-          id: completeSale.id,
-          sale_date: completeSale.sale_date,
-          original_invoice_number: completeSale.original_invoice_number,
-          client_name: completeSale.client_name,
-          client_phone: completeSale.client_phone,
-          car_model: completeSale.car_model,
-          payment_method: completeSale.payment_method,
-          installments_count: completeSale.installments_count,
-          original_cost_total: completeSale.original_cost_total,
-          profit_margin_percent: completeSale.profit_margin_percent,
-          freight_cost: completeSale.freight_cost,
-          card_fee_percent: completeSale.card_fee_percent,
-          pix_discount_percent: completeSale.pix_discount_percent,
-          final_sale_total: completeSale.final_sale_total,
-          net_profit: completeSale.net_profit,
-          warranty_deadline: completeSale.warranty_deadline,
-          invoice_file_url: completeSale.invoice_file_url,
-          status: completeSale.status,
-          notes: completeSale.notes,
-        });
+      // 1. Inserir Registro Principal da Venda
+      const { error: saleInsertErr } = await supabase.from('sales').insert({
+        id: completeSale.id,
+        sale_date: completeSale.sale_date,
+        original_invoice_number: completeSale.original_invoice_number,
+        client_name: completeSale.client_name,
+        client_phone: completeSale.client_phone,
+        car_model: completeSale.car_model,
+        payment_method: completeSale.payment_method,
+        installments_count: completeSale.installments_count || 1,
+        original_cost_total: completeSale.original_cost_total,
+        profit_margin_percent: completeSale.profit_margin_percent,
+        freight_cost: completeSale.freight_cost,
+        card_fee_percent: completeSale.card_fee_percent,
+        pix_discount_percent: completeSale.pix_discount_percent,
+        final_sale_total: completeSale.final_sale_total,
+        net_profit: completeSale.net_profit,
+        warranty_deadline: completeSale.warranty_deadline,
+        invoice_file_url: completeSale.invoice_file_url,
+        status: completeSale.status || 'CONCLUIDO',
+        notes: completeSale.notes || '',
+      });
 
-        if (saleInsertErr) {
-          throw new Error(`Erro ao salvar venda no Supabase: ${saleInsertErr.message}`);
-        }
-
-        if (completeSale.items && completeSale.items.length > 0) {
-          const { error: itemsInsertErr } = await supabase.from('sale_items').insert(
-            completeSale.items.map(it => ({
-              id: it.id,
-              sale_id: completeSale.id,
-              item_code: it.item_code,
-              item_name: it.item_name,
-              brand: it.brand,
-              quantity: it.quantity,
-              original_unit_cost: it.original_unit_cost,
-              final_unit_price: it.final_unit_price,
-              final_total_price: it.final_total_price,
-            }))
-          );
-
-          if (itemsInsertErr) {
-            console.warn('Erro ao inserir itens no Supabase:', itemsInsertErr.message);
-          }
-        }
-
-        return completeSale;
-      } catch (err) {
-        console.warn('Falha ao gravar no Supabase, salvando localmente:', err);
+      if (saleInsertErr) {
+        throw new Error(`Erro ao salvar venda no Supabase: ${saleInsertErr.message}`);
       }
+
+      // 2. Inserir os Itens da Venda
+      if (completeSale.items && completeSale.items.length > 0) {
+        const { error: itemsInsertErr } = await supabase.from('sale_items').insert(
+          completeSale.items.map(it => ({
+            id: it.id,
+            sale_id: completeSale.id,
+            item_code: it.item_code || '',
+            item_name: it.item_name,
+            brand: it.brand || 'Original',
+            quantity: it.quantity,
+            original_unit_cost: it.original_unit_cost,
+            final_unit_price: it.final_unit_price,
+            final_total_price: it.final_total_price,
+          }))
+        );
+
+        if (itemsInsertErr) {
+          console.warn('Erro ao inserir itens no Supabase:', itemsInsertErr.message);
+        }
+      }
+
+      return completeSale;
     }
 
-    // Fallback Local Storage
+    // Fallback Local Storage caso não configurado
     const existing = getLocalStorageSales();
     const updated = [completeSale, ...existing];
     saveLocalStorageSales(updated);
@@ -342,24 +276,53 @@ export class SalesService {
   }
 
   /**
-   * Exclui uma venda
+   * Exclui uma venda e seus itens no Supabase
    */
   public static async deleteSale(saleId: string): Promise<boolean> {
     const supabase = getSupabaseClient();
     
     if (supabase) {
-      try {
-        const { error } = await supabase.from('sales').delete().eq('id', saleId);
-        if (!error) return true;
-      } catch (err) {
-        console.warn('Erro ao deletar no Supabase:', err);
+      const { error } = await supabase.from('sales').delete().eq('id', saleId);
+      if (error) {
+        throw new Error(`Erro ao excluir venda no Supabase: ${error.message}`);
       }
+      return true;
     }
 
     const existing = getLocalStorageSales();
     const updated = existing.filter(s => s.id !== saleId);
     saveLocalStorageSales(updated);
     return true;
+  }
+
+  /**
+   * Escuta alterações em tempo real no banco do Supabase (para sincronizar computadores)
+   */
+  public static subscribeToSales(onChange: () => void): () => void {
+    const supabase = getSupabaseClient();
+    if (!supabase) return () => {};
+
+    const channel = supabase
+      .channel('sales_realtime_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sales' },
+        () => {
+          onChange();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sale_items' },
+        () => {
+          onChange();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }
 
   /**

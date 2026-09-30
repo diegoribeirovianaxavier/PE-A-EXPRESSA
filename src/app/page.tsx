@@ -31,6 +31,13 @@ export default function HomePage() {
 
   useEffect(() => {
     loadSales();
+    // Escuta alterações em tempo real no Supabase (novo orçamento salvo em qualquer computador atualiza a tela na hora)
+    const unsubscribe = SalesService.subscribeToSales(() => {
+      loadSales();
+    });
+    return () => {
+      unsubscribe();
+    };
   }, [loadSales]);
 
   // Callback chamado quando uma nova venda é salva

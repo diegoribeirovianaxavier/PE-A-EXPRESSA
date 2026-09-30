@@ -197,11 +197,12 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
             <div className="hidden sm:flex items-center gap-2">
               <Tag
-                color={isSupabaseConfigured ? 'success' : 'processing'}
-                className="font-medium text-xs flex items-center gap-1"
+                color={isSupabaseConfigured() ? 'success' : 'processing'}
+                className="font-medium text-xs flex items-center gap-1 cursor-pointer"
+                onClick={() => onTabChange('settings')}
               >
                 <DatabaseOutlined />
-                {isSupabaseConfigured ? 'Supabase Conectado' : 'Modo Demonstração Local'}
+                {isSupabaseConfigured() ? 'Supabase Conectado' : 'Modo Demonstração Local (Clique para Conectar)'}
               </Tag>
             </div>
           </div>
